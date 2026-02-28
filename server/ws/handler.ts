@@ -349,7 +349,36 @@ async function handleMessageSend(
 
 // ─── Typing ───────────────────────────────────────────────────────────────────
 
-function handleTypingStart(socket: AuthenticatedWs, data: { partnerId?: string }): void
+function clearTypingTimeout(userId: string, partnerId: string): void
+{
+  const key = `${userId}:${partnerId}`;
+  const timeout = typingTimeouts.get(key);
+  if (timeout) {
+    clearTimeout(timeout);
+    typingTimeouts.delete(key);
+  }
+}
+
+function setTypingTimeout(userId: string, partnerId: string): void
+{
+  const key = `${userId}:${partnerId}`;
+  clearTypingTimeout(userId, partnerId);
+  
+  const timeout = setTimeout(() => {
+    // Auto-stop typing after timeout
+    store.setTyping(userId, partnerId, false);
+    const partnerWs = store.getWebSocket(partnerId);
+    if (partnerWs) {
+      const payload: TypingIndicatorPayload = { userId, isTyping: false, timestamp: Date.now() };
+      send(partnerWs, "typing:stop", payload);
+    }
+    typingTimeouts.delete(key);
+  }, TYPING_TIMEOUT_MS);
+  
+  typingTimeouts.set(key, timeout);
+}
+
+function handleTypingStart(socket: AuthenticatedWs, data: TypingStartPayload): void
 {
   const userId = socket.userId!;
   const partnerId = data?.partnerId;
@@ -358,8 +387,15 @@ function handleTypingStart(socket: AuthenticatedWs, data: { partnerId?: string }
     return;
   }
   store.setTyping(userId, partnerId, true);
+  
+  // Set auto-stop timeout
+  setTypingTimeout(userId, partnerId);
+  
   const partnerWs = store.getWebSocket(partnerId);
-  if (partnerWs) send(partnerWs, "typing:start", { userId, isTyping: true });
+  if (partnerWs) {
+    const payload: TypingIndicatorPayload = { userId, isTyping: true, timestamp: Date.now() };
+    send(partnerWs, "typing:start", payload);
+  }
 }
 
 
