@@ -852,6 +852,10 @@ function handleDisconnect(socket: AuthenticatedWs): void {
       }
     }
     
+    // Note: We do NOT clear content detection session on disconnect
+    // as users may reconnect and want to see their history
+    // Session cleanup is handled by TTL in contentDetectionStore
+    
     store.unregisterUser(userId);
     broadcastTypingStop(userId);
     broadcastUserOffline(userId);
