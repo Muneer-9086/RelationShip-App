@@ -135,9 +135,10 @@ const chat_human_conversation_controller = async (req: Request, res: Response, n
 
 const chat_rephase_controller = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const { converstationId } = req.query;
+        const rawConversationId = req.query.converstationId ?? req.query.conversationId;
+        const converstationId = typeof rawConversationId === "string" ? rawConversationId : undefined;
 
-        if (typeof converstationId !== "string") {
+        if (!converstationId) {
             res.status(400).json({ message: "conversation id is not valid" });
             return;
         }
@@ -149,6 +150,11 @@ const chat_rephase_controller = async (req: Request, res: Response, next: NextFu
         }
 
         const [userId1, userId2] = ids;
+        if (!mongoose.Types.ObjectId.isValid(userId1) || !mongoose.Types.ObjectId.isValid(userId2)) {
+            res.status(400).json({ message: "conversation id is not valid" });
+            return;
+        }
+
         const objectId1 = new mongoose.Types.ObjectId(userId1);
         const objectId2 = new mongoose.Types.ObjectId(userId2);
 
@@ -192,9 +198,10 @@ const chat_rephase_controller = async (req: Request, res: Response, next: NextFu
 
 const chat_rephase_suggestion_controller = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const { conversationId } = req.query;
+        const rawConversationId = req.query.conversationId ?? req.query.converstationId;
+        const conversationId = typeof rawConversationId === "string" ? rawConversationId : undefined;
 
-        if (!conversationId || typeof conversationId !== "string") {
+        if (!conversationId) {
             res.status(400).json({ message: "valid conversation id is not provided" });
             return;
         }
@@ -206,6 +213,11 @@ const chat_rephase_suggestion_controller = async (req: Request, res: Response, n
         }
 
         const [userId1, userId2] = ids;
+        if (!mongoose.Types.ObjectId.isValid(userId1) || !mongoose.Types.ObjectId.isValid(userId2)) {
+            res.status(400).json({ message: "conversation id is not valid" });
+            return;
+        }
+
         const objectId1 = new mongoose.Types.ObjectId(userId1);
         const objectId2 = new mongoose.Types.ObjectId(userId2);
 
@@ -272,7 +284,9 @@ const chat_rephase_suggestion_controller = async (req: Request, res: Response, n
             chatMessageId: lastMessage._id,
             chatRoomId: chatRoom._id,
             content: lastMessage.content,
-            positiveRewriteResult
+            aiRewriteSuggestion: positiveRewriteResult.suggestions,
+            reason: positiveRewriteResult.reason,
+            tone: positiveRewriteResult.tone
         });
     } catch (err) {
         next(err);
