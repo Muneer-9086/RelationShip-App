@@ -41,6 +41,7 @@ interface StreamingState {
   buffer: string;
 }
 
+// Content detection request payloads
 // Content detection event payloads (user-isolated)
 interface ContentFlaggedPayload {
   messageId: string;
@@ -49,15 +50,12 @@ interface ContentFlaggedPayload {
   timestamp: number;
 }
 
-interface ContentBlockedPayload {
-  messageId: string;
-  conversationId: string;
-  reason: string;
-  suggestions: string[];
-  timestamp: number;
+interface ContentInsightRequestPayload {
+  conversationId?: string;
+  limit?: number;
 }
 
-interface PatternAlertPayload {
+interface PatternAlertsResponsePayload {
   alerts: PatternAlert[];
   timestamp: number;
 }
@@ -356,10 +354,13 @@ function handleGetContentInsights(
 
 function handleGetPatternAlerts(socket: AuthenticatedWs): void {
   // User should not receive internal moderation pattern alerts over WS.
+  const payload: PatternAlertsResponsePayload = {
   send(socket, "content:pattern_alerts", {
     alerts: [],
     timestamp: Date.now()
-  });
+  };
+
+  send(socket, "content:pattern_alerts", payload);
 }
 
 // ─── Message Send with Content Detection ─────────────────────────────────────
@@ -414,6 +415,7 @@ async function handleMessageSendWithSentiment(
       };
       contentDetectionStore.addInsight(userId, insight);
 
+      // Keep blocked insight server-side and save message with blocked status (not delivered to receiver)
       // Send blocked notification ONLY to sender
       const blockedPayload: ContentBlockedPayload = {
         messageId,
@@ -463,6 +465,7 @@ async function handleMessageSendWithSentiment(
 
       // If problematic but not blocking, keep server-side insight only.
       if (detection.isProblematic) {
+        // Intentionally do not emit moderation insights to sender via WS.
         const flaggedPayload: ContentFlaggedPayload = {
           messageId,
           conversationId: conversation.conversationId,
