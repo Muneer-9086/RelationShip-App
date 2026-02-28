@@ -135,7 +135,6 @@ export function ChatLayout() {
 
   useEffect(() =>
   {
-
     const init = async () =>
     {
       try {
@@ -143,30 +142,71 @@ export function ChatLayout() {
         const data = response.data;
         console.log("___converstation___human data");
         console.log(data['chatHumanData']);
-        console.log(conversations)
-        const dummyConversations = conversations.map((conv) => {
-          if (conv.id === activeConversationId) {
-            return {
-              ...conv,
-              messages: data['chatHumanData']
+        
+        // Transform backend messages to frontend format
+        const transformedMessages = (data['chatHumanData'] || []).map((msg: any) => ({
+          id: msg._id || msg.messageId || `msg-${Date.now()}-${Math.random()}`,
+          senderId: msg.senderId?._id || msg.senderId || '',
+          content: msg.content || '',
+          timestamp: new Date(msg.createdAt || msg.timestamp || Date.now()),
+          type: msg.senderType === 'ai' ? 'ai' : 'user',
+        }));
+        
+        setConversations((prevConversations) => {
+          return prevConversations.map((conv) => {
+            if (conv.id === activeConversationId) {
+              // Only update if we have no messages or backend has more
+              // Preserve any new messages that came via WebSocket
+              const existingMessageIds = new Set(conv.messages.map(m => m.id));
+              const newBackendMessages = transformedMessages.filter(
+                (m: any) => !existingMessageIds.has(m.id)
+              );
+              
+              // If conversation has no messages, use backend data
+              if (conv.messages.length === 0) {
+                return {
+                  ...conv,
+                  messages: transformedMessages,
+                  backendConversationId: data['chatRoom']?._id || conv.backendConversationId
+                };
+              }
+              
+              // If backend has messages that frontend doesn't have, merge them
+              if (newBackendMessages.length > 0) {
+                // Merge and sort by timestamp
+                const mergedMessages = [...transformedMessages, ...conv.messages]
+                  .filter((msg, index, self) => 
+                    index === self.findIndex((m) => m.id === msg.id)
+                  )
+                  .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+                
+                return {
+                  ...conv,
+                  messages: mergedMessages,
+                  backendConversationId: data['chatRoom']?._id || conv.backendConversationId
+                };
+              }
+              
+              // Otherwise keep existing messages (preserves WebSocket messages)
+              return {
+                ...conv,
+                backendConversationId: data['chatRoom']?._id || conv.backendConversationId
+              };
             }
-          }
-          return conv;
-        })
-        setConversations(dummyConversations);
+            return conv;
+          });
+        });
       }
       catch (err) {
         console.log("Error:Message List");
+        console.log(err);
       }
-
     }
+    
     if (activeConversationId) {
       init();
     }
-
-
-
-  }, [activeConversationId])
+  }, [activeConversationId, setConversations])
 
 
   console.log("___activeConversation___");
