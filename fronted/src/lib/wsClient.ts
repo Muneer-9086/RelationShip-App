@@ -88,6 +88,11 @@ export type WsEventHandlers = {
   "ai:aborted": (data: AIAbortedPayload) => void;
   "ai:error": (data: AIErrorPayload) => void;
   "ai:stopped": (data: AIStoppedPayload) => void;
+  "content:flagged": (data: ContentFlaggedPayload) => void;
+  "content:blocked": (data: ContentBlockedPayload) => void;
+  "content:pattern_alert": (data: PatternAlertPayload) => void;
+  "content:insights": (data: ContentInsightsPayload) => void;
+  "content:pattern_alerts": (data: PatternAlertPayload) => void;
   "mode:switch": (data: { conversationId: string; mode: "human" | "ai" }) => void;
   "*": (data: { event: string; data: unknown }) => void;
 };
