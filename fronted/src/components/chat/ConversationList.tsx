@@ -1,15 +1,15 @@
-import { Conversation, User } from '@/types/chat';
+import type { Conversation, User, UserPresenceStatus } from '@/types/chat';
 import { cn } from '@/lib/utils';
-import { Users, Sparkles, Plus } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Users, Sparkles } from 'lucide-react';
+import { OnlineStatus } from './OnlineStatus';
 
-interface ConversationListProps
-{
+interface ConversationListProps {
   conversations: Conversation[];
   activeConversationId: string | null;
   onSelectConversation: (id: string) => void;
   currentUser: User;
   onNewChat?: () => void;
+  onlineUsers?: string[];
 }
 
 export function ConversationList({
@@ -18,18 +18,19 @@ export function ConversationList({
   onSelectConversation,
   currentUser,
   onNewChat,
-}: ConversationListProps)
-{
-  const getOtherParticipant = (conversation: Conversation) =>
-  {
-    console.log("GET OTHER PARTICAIPTATIOn");
-    console.log()
-    console.log(conversation.participants.find((p) => p.id !== currentUser.id))
+  onlineUsers = [],
+}: ConversationListProps) {
+  const getOtherParticipant = (conversation: Conversation): User | undefined => {
     return conversation.participants.find((p) => p.id !== currentUser.id);
   };
 
-  const formatTime = (date?: Date) =>
-  {
+  const getParticipantStatus = (participant: User | undefined): UserPresenceStatus => {
+    if (!participant) return 'offline';
+    if (participant.id === '__ai__') return 'online';
+    return onlineUsers.includes(participant.id) ? 'online' : 'offline';
+  };
+
+  const formatTime = (date?: Date): string => {
     if (!date) return '';
     const now = new Date();
     const diff = now.getTime() - date.getTime();
@@ -45,8 +46,7 @@ export function ConversationList({
     return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
 
-  const getPreviewText = (conversation: Conversation) =>
-  {
+  const getPreviewText = (conversation: Conversation): string => {
     const lastMessage = conversation.messages[conversation.messages.length - 1];
     if (!lastMessage) return 'No messages yet';
 
@@ -60,11 +60,8 @@ export function ConversationList({
     return prefix + lastMessage.content;
   };
 
-  console.log("___conversations___otherParticipant___");
-  console.log(conversations)
-
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full" data-testid="conversation-list">
       {/* Header */}
       <div className="px-4 py-4 border-b border-sidebar-border">
         <div className="flex items-center justify-between">
@@ -74,25 +71,16 @@ export function ConversationList({
               Communicate mindfully
             </p>
           </div>
-
         </div>
       </div>
 
       {/* Conversation list */}
       <div className="flex-1 overflow-y-auto custom-scrollbar">
-        {conversations.map((conversation) =>
-        {
-          console.log("___conversation___");
-          console.log(conversation);
+        {conversations.map((conversation) => {
           const otherParticipant = getOtherParticipant(conversation);
+          const participantStatus = getParticipantStatus(otherParticipant);
           const isActive = conversation.id === activeConversationId;
           const lastMessage = conversation.messages[conversation.messages.length - 1];
-
-          console.log("___otherParticipant___");
-          console.log(otherParticipant);
-          console.log(isActive);
-          console.log(lastMessage);
-          console.log(otherParticipant?.name.charAt(0).toUpperCase());
 
           return (
             <div
@@ -104,37 +92,63 @@ export function ConversationList({
                   ? 'bg-sidebar-accent'
                   : 'hover:bg-sidebar-accent/50'
               )}
+              data-testid={`conversation-item-${conversation.id}`}
             >
               <div className="flex items-start gap-3">
-                {/* Avatar */}
-                <div
-                  className={cn(
-                    'flex-shrink-0 w-11 h-11 rounded-full flex items-center justify-center text-sm font-medium',
-                    conversation.type === 'group'
-                      ? 'bg-muted text-muted-foreground'
-                      : 'bg-primary/10 text-primary'
-                  )}
-                >
-                  {
-                    otherParticipant && conversation.type === 'group' ? (
+                {/* Avatar with online indicator */}
+                <div className="relative flex-shrink-0">
+                  <div
+                    className={cn(
+                      'w-11 h-11 rounded-full flex items-center justify-center text-sm font-medium',
+                      conversation.type === 'group'
+                        ? 'bg-muted text-muted-foreground'
+                        : 'bg-primary/10 text-primary'
+                    )}
+                    data-testid="conversation-avatar"
+                  >
+                    {otherParticipant && conversation.type === 'group' ? (
                       <Users size={18} />
                     ) : (
-                      <>
-{                      otherParticipant?.name.charAt(0).toUpperCase()
-}
-                      </>
+                      otherParticipant?.name.charAt(0).toUpperCase()
                     )}
+                  </div>
+                  {/* Online status indicator */}
+                  {conversation.type !== 'group' && (
+                    <div className="absolute -bottom-0.5 -right-0.5">
+                      <OnlineStatus 
+                        status={participantStatus} 
+                        size="md" 
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Content */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5">
-                      <span className="font-medium text-sm text-sidebar-foreground truncate">
+                      <span 
+                        className="font-medium text-sm text-sidebar-foreground truncate"
+                        data-testid="conversation-name"
+                      >
                         {conversation.name}
                       </span>
                       {conversation.aiParticipant && (
                         <Sparkles size={12} className="text-ai flex-shrink-0" />
+                      )}
+                      {/* Inline status badge */}
+                      {conversation.type !== 'group' && (
+                        <span 
+                          className={cn(
+                            "text-[10px] px-1.5 py-0.5 rounded-full",
+                            participantStatus === 'online' 
+                              ? 'bg-green-500/10 text-green-600' 
+                              : 'bg-gray-500/10 text-gray-500'
+                          )}
+                          data-testid={`status-badge-${participantStatus}`}
+                        >
+                          {participantStatus === 'online' ? 'Online' : 'Offline'}
+                        </span>
                       )}
                     </div>
                     <span className="text-[10px] text-muted-foreground flex-shrink-0">
@@ -147,7 +161,10 @@ export function ConversationList({
                       {getPreviewText(conversation)}
                     </p>
                     {conversation.unreadCount > 0 && (
-                      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary text-primary-foreground text-[10px] font-medium flex items-center justify-center">
+                      <span 
+                        className="flex-shrink-0 w-5 h-5 rounded-full bg-primary text-primary-foreground text-[10px] font-medium flex items-center justify-center"
+                        data-testid="unread-count"
+                      >
                         {conversation.unreadCount}
                       </span>
                     )}
