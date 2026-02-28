@@ -446,8 +446,12 @@ function broadcastTypingStop(userId: string): void
 {
   const partners = store.getPartnersWithTypingFrom(userId);
   for (const partnerId of partners) {
+    clearTypingTimeout(userId, partnerId);
     const partnerWs = store.getWebSocket(partnerId);
-    if (partnerWs) send(partnerWs, "typing:stop", { userId, isTyping: false });
+    if (partnerWs) {
+      const payload: TypingIndicatorPayload = { userId, isTyping: false, timestamp: Date.now() };
+      send(partnerWs, "typing:stop", payload);
+    }
   }
 }
 
