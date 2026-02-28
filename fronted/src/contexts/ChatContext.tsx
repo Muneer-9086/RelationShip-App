@@ -530,6 +530,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     clientRef.current.typingStop(partnerId, content);
   }, []);
 
+  const dismissContentAlert = useCallback((alertId: string) => {
+    setContentAlerts((prev) => prev.filter((alert) => alert.id !== alertId));
+  }, []);
+
+  const clearContentAlerts = useCallback(() => {
+    setContentAlerts([]);
+  }, []);
+
   const value: ChatContextValue = {
     client: clientRef.current,
     userId,
@@ -540,6 +548,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     activeConversationId,
     typingFrom,
     onlineUsers,
+    contentAlerts,
     connect,
     disconnect,
     selectConversation: setActiveConversationId,
@@ -558,6 +567,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     stopAIStream,
     isUserOnline,
     getTypingUsers,
+    dismissContentAlert,
+    clearContentAlerts,
   };
 
   return (
