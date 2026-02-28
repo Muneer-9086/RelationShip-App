@@ -436,7 +436,8 @@ async function handleMessageSendWithSentiment(
 async function handleMessageSend(
   socket: AuthenticatedWs,
   data: MessageSendPayload,
-  status: string = "sent"
+  status: string = "sent",
+  messageId?: string
 ): Promise<void> {
   const senderId = socket.userId!;
 
@@ -458,6 +459,7 @@ async function handleMessageSend(
 
   if (isAIMode) {
     const humanMsg = createMessage(senderId, ChatStore.AI_USER_ID, content, "human");
+    if (messageId) humanMsg.messageId = messageId;
     store.addMessage(conv.conversationId, humanMsg, status, "ai");
     send(socket, "message:receive", { message: humanMsg, conversationId: conv.conversationId });
 
@@ -472,19 +474,32 @@ async function handleMessageSend(
     }
   } else {
     const msg = createMessage(senderId, receiverId, content, "human");
+    if (messageId) msg.messageId = messageId;
     await store.addMessage(conv.conversationId, msg, status, "human");
     
-    const payload = {
+    // Payload for sender (includes status for their reference)
+    const senderPayload = {
       message: msg,
       conversationId: conv.conversationId,
       status,
       channel: "human"
     };
+    send(socket, "message:receive", senderPayload);
     
-    send(socket, "message:receive", payload);
-    
-    const receiverWs = store.getWebSocket(receiverId);
-    if (receiverWs) send(receiverWs, "message:receive", payload);
+    // For receiver: ONLY send if NOT blocked
+    // This ensures blocked messages stay private to sender
+    if (status !== "blocked") {
+      const receiverWs = store.getWebSocket(receiverId);
+      if (receiverWs) {
+        // Receiver payload does NOT include status (they don't need to know)
+        const receiverPayload = {
+          message: msg,
+          conversationId: conv.conversationId,
+          channel: "human"
+        };
+        send(receiverWs, "message:receive", receiverPayload);
+      }
+    }
   }
 }
 
