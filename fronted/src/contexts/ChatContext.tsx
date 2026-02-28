@@ -119,6 +119,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [showInsights, setShowInsights] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   const [typingFrom, setTypingFrom] = useState<TypingState>({});
+  const [contentAlerts, setContentAlerts] = useState<ContentAlert[]>([]);
   const convMapRef = useRef<Map<string, Conversation>>(new Map());
 
   const getConversationKey = useCallback((uid: string, peerId: string) => {
