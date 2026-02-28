@@ -299,26 +299,137 @@ function handleGetOnline(socket: AuthenticatedWs): void {
   send(socket, "presence:online_users", { users: getOnlineUsers() });
 }
 
-// ─── Message Send with Sentiment Analysis ─────────────────────────────────────
+// ─── Message Send with Content Detection ─────────────────────────────────────
 
 async function handleMessageSendWithSentiment(
   socket: AuthenticatedWs,
   data: MessageSendPayload
 ): Promise<void> {
   const userId = socket.userId!;
+  const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   try {
-    const result = await classifyMessageSentiment({ message: data.content });
+    // Step 1: Quick pattern check (fast, no AI)
+    const quickCheck = quickContentCheck(data.content);
 
-    if (result.sentiment === "negative" && result.isHurtful) {
-      await handleMessageSend(socket, data, "blocked");
-    } else {
-      await handleMessageSend(socket, data, "sent");
+    // Step 2: If critical pattern detected, block immediately
+    if (quickCheck.estimatedSeverity === "critical") {
+      const detection: ContentDetectionResult = {
+        isProblematic: true,
+        flags: quickCheck.quickFlags,
+        severity: "critical",
+        confidence: 0.95,
+        reason: "Critical content pattern detected",
+        suggestions: [
+          "Take a moment to calm down",
+          "Consider expressing your feelings differently",
+          "Think about the impact of your words"
+        ],
+        shouldBlock: true
+      };
+
+      // Store insight in SENDER's session ONLY (user-isolated)
+      const insight: UserContentInsight = {
+        userId,
+        messageId,
+        timestamp: Date.now(),
+        content: data.content.substring(0, 100),
+        detection,
+        conversationId: `${userId}:${data.receiverId}`,
+        partnerId: data.receiverId
+      };
+      contentDetectionStore.addInsight(userId, insight);
+
+      // Send blocked notification ONLY to sender
+      const blockedPayload: ContentBlockedPayload = {
+        messageId,
+        conversationId: `${userId}:${data.receiverId}`,
+        reason: detection.reason,
+        suggestions: detection.suggestions,
+        timestamp: Date.now()
+      };
+      send(socket, "content:blocked", blockedPayload);
+
+      // Still save message with blocked status (for sender's reference)
+      await handleMessageSend(socket, data, "blocked", messageId);
+      return;
     }
+
+    // Step 3: If quick check found issues or message needs AI review
+    if (quickCheck.requiresAICheck) {
+      // Get conversation context for better analysis
+      const conv = await store.getOrCreateConversation(userId, data.receiverId, "human");
+      const recentMessages = conv.messages
+        .slice(-3)
+        .map(m => `${m.senderId === userId ? "You" : "Them"}: ${m.content}`)
+        .join("\n");
+
+      // Run AI detection
+      const detection = await detectProblematicContent({
+        userId,
+        messageId,
+        content: data.content,
+        conversationId: conv.conversationId,
+        partnerId: data.receiverId,
+        context: recentMessages
+      });
+
+      // If should block
+      if (detection.shouldBlock) {
+        const blockedPayload: ContentBlockedPayload = {
+          messageId,
+          conversationId: conv.conversationId,
+          reason: detection.reason,
+          suggestions: detection.suggestions,
+          timestamp: Date.now()
+        };
+        send(socket, "content:blocked", blockedPayload);
+        await handleMessageSend(socket, data, "blocked", messageId);
+        return;
+      }
+
+      // If problematic but not blocking, send warning to SENDER ONLY
+      if (detection.isProblematic) {
+        const flaggedPayload: ContentFlaggedPayload = {
+          messageId,
+          conversationId: conv.conversationId,
+          detection,
+          timestamp: Date.now()
+        };
+        // Send ONLY to the sender (user-isolated)
+        send(socket, "content:flagged", flaggedPayload);
+
+        // Check for pattern alerts
+        const alerts = contentDetectionStore.getPatternAlerts(userId);
+        if (alerts.length > 0) {
+          send(socket, "content:pattern_alert", {
+            alerts,
+            timestamp: Date.now()
+          } as PatternAlertPayload);
+        }
+      }
+
+      // Send the message
+      await handleMessageSend(socket, data, "sent", messageId);
+    } else {
+      // No issues detected, send normally
+      await handleMessageSend(socket, data, "sent", messageId);
+    }
+
   } catch (err) {
-    console.error("Sentiment analysis error:", err);
-    // Fall back to sending the message
-    await handleMessageSend(socket, data, "sent");
+    console.error("Content detection error:", err);
+    // On error, fall back to basic sentiment check
+    try {
+      const result = await classifyMessageSentiment({ message: data.content });
+      if (result.sentiment === "negative" && result.isHurtful) {
+        await handleMessageSend(socket, data, "blocked", messageId);
+      } else {
+        await handleMessageSend(socket, data, "sent", messageId);
+      }
+    } catch {
+      // Final fallback: send the message
+      await handleMessageSend(socket, data, "sent", messageId);
+    }
   }
 }
 
