@@ -400,6 +400,57 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       // Handle AI token streaming if needed
     });
 
+    // Content flagged listener (user-isolated: only sender receives this)
+    const unsubContentFlagged = client.on("content:flagged", (data: unknown) => {
+      const d = data as ContentFlaggedPayload;
+      if (d?.messageId) {
+        const alert: ContentAlert = {
+          id: `flagged-${d.messageId}-${Date.now()}`,
+          type: "flagged",
+          messageId: d.messageId,
+          conversationId: d.conversationId,
+          detection: d.detection,
+          suggestions: d.detection?.suggestions || [],
+          timestamp: d.timestamp || Date.now()
+        };
+        setContentAlerts((prev) => [...prev.slice(-19), alert]); // Keep last 20
+      }
+    });
+
+    // Content blocked listener (user-isolated: only sender receives this)
+    const unsubContentBlocked = client.on("content:blocked", (data: unknown) => {
+      const d = data as ContentBlockedPayload;
+      if (d?.messageId) {
+        const alert: ContentAlert = {
+          id: `blocked-${d.messageId}-${Date.now()}`,
+          type: "blocked",
+          messageId: d.messageId,
+          conversationId: d.conversationId,
+          reason: d.reason,
+          suggestions: d.suggestions || [],
+          timestamp: d.timestamp || Date.now()
+        };
+        setContentAlerts((prev) => [...prev.slice(-19), alert]);
+        // Also trigger the insights panel for blocked messages
+        setShowInsights(true);
+      }
+    });
+
+    // Pattern alert listener (user-isolated: only this user receives their patterns)
+    const unsubPatternAlert = client.on("content:pattern_alert", (data: unknown) => {
+      const d = data as PatternAlertPayload;
+      if (d?.alerts?.length > 0) {
+        const alert: ContentAlert = {
+          id: `pattern-${Date.now()}`,
+          type: "pattern",
+          patternAlerts: d.alerts,
+          suggestions: d.alerts.map(a => a.message),
+          timestamp: d.timestamp || Date.now()
+        };
+        setContentAlerts((prev) => [...prev.slice(-19), alert]);
+      }
+    });
+
     return () => {
       unsubConnState();
       unsubAuth();
@@ -411,6 +462,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       unsubUserOffline();
       unsubModeSwitch();
       unsubAiToken();
+      unsubContentFlagged();
+      unsubContentBlocked();
+      unsubPatternAlert();
     };
   }, [userId, getConversationKey, onlineUsers]);
 
