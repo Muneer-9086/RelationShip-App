@@ -19,6 +19,13 @@ import type {
   AuthResponsePayload,
   MessageReceivePayload,
 } from "@/types/chat";
+import type {
+  ContentFlaggedPayload,
+  ContentBlockedPayload,
+  PatternAlertPayload,
+  PatternAlert,
+  ContentDetectionResult,
+} from "@/lib/wsClient";
 
 function backendToFrontendMessage(m: {
   messageId: string;
