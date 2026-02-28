@@ -41,6 +41,32 @@ interface StreamingState {
   buffer: string;
 }
 
+// Content detection event payloads (user-isolated)
+interface ContentFlaggedPayload {
+  messageId: string;
+  conversationId: string;
+  detection: ContentDetectionResult;
+  timestamp: number;
+}
+
+interface ContentBlockedPayload {
+  messageId: string;
+  conversationId: string;
+  reason: string;
+  suggestions: string[];
+  timestamp: number;
+}
+
+interface PatternAlertPayload {
+  alerts: PatternAlert[];
+  timestamp: number;
+}
+
+interface ContentInsightRequestPayload {
+  conversationId?: string;
+  limit?: number;
+}
+
 // ─── State ────────────────────────────────────────────────────────────────────
 
 const activeStreams = new Map<string, StreamingState>();
