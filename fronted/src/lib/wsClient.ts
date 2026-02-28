@@ -126,6 +126,74 @@ export interface AIStoppedPayload {
   timestamp: number;
 }
 
+// Content Detection Types
+export type ContentFlag = 
+  | "hurtful"
+  | "aggressive" 
+  | "manipulative"
+  | "dismissive"
+  | "threatening"
+  | "passive_aggressive"
+  | "gaslighting"
+  | "contemptuous"
+  | "stonewalling"
+  | "none";
+
+export type SeverityLevel = "low" | "medium" | "high" | "critical";
+
+export interface ContentDetectionResult {
+  isProblematic: boolean;
+  flags: ContentFlag[];
+  severity: SeverityLevel;
+  confidence?: number;
+  reason?: string;
+  suggestions: string[];
+  shouldBlock?: boolean;
+}
+
+export interface ContentFlaggedPayload {
+  messageId: string;
+  conversationId: string;
+  detection: ContentDetectionResult;
+  timestamp: number;
+}
+
+export interface ContentBlockedPayload {
+  messageId: string;
+  conversationId: string;
+  reason: string;
+  suggestions: string[];
+  timestamp: number;
+}
+
+export interface PatternAlert {
+  type: "repeated_aggression" | "escalating_negativity" | "communication_breakdown";
+  message: string;
+  timestamp: number;
+  count: number;
+}
+
+export interface PatternAlertPayload {
+  alerts: PatternAlert[];
+  timestamp: number;
+}
+
+export interface ContentInsightsPayload {
+  insights: Array<{
+    messageId: string;
+    timestamp: number;
+    conversationId: string;
+    detection: {
+      isProblematic: boolean;
+      flags: ContentFlag[];
+      severity: SeverityLevel;
+      suggestions: string[];
+    };
+  }>;
+  total: number;
+  timestamp: number;
+}
+
 export class WsClient {
   private ws: WebSocket | null = null;
   private listeners = new Map<string, Set<(data: unknown) => void>>();
