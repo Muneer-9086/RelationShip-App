@@ -120,25 +120,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       if (!userId) throw new Error("Not authenticated");
       const key = getConversationKey(userId, data['_id'] as string);
       const peerId = data['_id'] as string;
+      
+      // Check convMapRef first
       let conv = convMapRef.current.get(key);
-
-      const dummyConversations = conversations.filter((conv) => {
-        if (conv.id === activeConversationId) {
-          return true;
-        }
-        return false;
-      });
-      
-      if (dummyConversations.length > 0) {
-        conv = dummyConversations[0];
-        convMapRef.current.set(key, conv);
-        return conv;
-      }
-      
       if (conv) return conv;
       
       const name = data['fullName'] as string;
-      const peerOnline = isUserOnline(peerId);
+      const peerOnline = onlineUsers.includes(peerId);
       
       conv = {
         id: key,
@@ -165,7 +153,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       });
       return conv;
     },
-    [userId, getConversationKey, conversations, activeConversationId, isUserOnline]
+    [userId, getConversationKey, onlineUsers]
   );
 
   const connect = useCallback(
