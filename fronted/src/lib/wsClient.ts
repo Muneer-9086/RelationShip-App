@@ -75,11 +75,49 @@ export type WsEventHandlers = {
   "error": (data: ErrorPayload) => void;
   "connected": (data: { message: string }) => void;
   "connection:state": (state: ConnectionState) => void;
-  "ai:token": (data: { chunk: string }) => void;
-  "ai:done": (data: { ai: string }) => void;
+  "ai:token": (data: AITokenPayload) => void;
+  "ai:done": (data: AIDonePayload) => void;
+  "ai:stream_start": (data: AIStreamStartPayload) => void;
+  "ai:aborted": (data: AIAbortedPayload) => void;
+  "ai:error": (data: AIErrorPayload) => void;
+  "ai:stopped": (data: AIStoppedPayload) => void;
   "mode:switch": (data: { conversationId: string; mode: "human" | "ai" }) => void;
   "*": (data: { event: string; data: unknown }) => void;
 };
+
+// AI Streaming Types
+export interface AITokenPayload {
+  receiver: string;
+  chunk: string;
+  timestamp: number;
+}
+
+export interface AIDonePayload {
+  receiver: string;
+  content: string;
+  timestamp: number;
+}
+
+export interface AIStreamStartPayload {
+  receiver: string;
+  timestamp: number;
+}
+
+export interface AIAbortedPayload {
+  receiver: string;
+  timestamp: number;
+}
+
+export interface AIErrorPayload {
+  receiver: string;
+  message: string;
+  timestamp: number;
+}
+
+export interface AIStoppedPayload {
+  receiver: string;
+  timestamp: number;
+}
 
 export class WsClient {
   private ws: WebSocket | null = null;
