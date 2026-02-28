@@ -1,10 +1,19 @@
-import { useRef, useEffect,useState } from 'react';
-import { Conversation, User } from '@/types/chat';
+import { useRef, useEffect, useState, useMemo } from 'react';
+import type { Conversation, User, UserPresenceStatus } from '@/types/chat';
 import { MessageBubble } from './MessageBubble';
 import { MessageComposer } from './MessageComposer';
+import { TypingIndicator } from './TypingIndicator';
+import { OnlineStatus } from './OnlineStatus';
 import { Sparkles, Users, Eye, EyeOff, Lightbulb } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+
+interface TypingState {
+  [userId: string]: {
+    isTyping: boolean;
+    timestamp: number;
+  };
+}
 
 interface ChatAreaProps {
   conversation: Conversation;
@@ -14,8 +23,8 @@ interface ChatAreaProps {
   onToggleInsights: () => void;
   showInsights: boolean;
   onTypingStart?: (partnerId: string) => void;
-  onTypingStop?: (partnerId: string,content:string) => void;
-  typingFrom?: Record<string, boolean>;
+  onTypingStop?: (partnerId: string, content: string) => void;
+  typingFrom?: TypingState;
   userId: string;
 }
 
@@ -33,26 +42,24 @@ export function ChatArea({
 }: ChatAreaProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    const otherParticipants = conversation.participants.filter(
-    (p) => p.id !== currentUser.id
+  const otherParticipants = useMemo(() => 
+    conversation.participants.filter((p) => p.id !== currentUser.id),
+    [conversation.participants, currentUser.id]
   );
-  const [partnerId,setPartnerId] = useState<string>(otherParticipants[0]?.id);
-  const [isPartnerTyping, setIsPartnerTyping] = useState<boolean>(otherParticipants[0]?.id && typingFrom?.[otherParticipants[0]?.id]);
 
+  const partnerId = otherParticipants[0]?.id;
+  const partnerName = otherParticipants[0]?.name;
+  const partnerStatus: UserPresenceStatus = otherParticipants[0]?.status || 'offline';
+
+  // Check if partner is typing
+  const isPartnerTyping = useMemo(() => {
+    if (!partnerId || !typingFrom) return false;
+    return typingFrom[partnerId]?.isTyping ?? false;
+  }, [partnerId, typingFrom]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [conversation.messages]);
-
-  useEffect(() =>
-  {
-    if (!isPartnerTyping) {
-      setIsPartnerTyping(otherParticipants[0]?.id && typingFrom?.[otherParticipants[0]?.id])
-    }
-    if (!partnerId) {
-      setPartnerId(otherParticipants[0]?.id);
-    }
-  },[partnerId,isPartnerTyping])
 
   const getSender = (senderId: string): User => {
     if (senderId === 'ai-assistant') {
@@ -71,49 +78,53 @@ export function ChatArea({
     );
   };
 
-
-
-
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div className="flex flex-col h-full bg-background" data-testid="chat-area">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card">
         <div className="flex items-center gap-3">
-          {/* Avatar */}
-          <div
-            className={cn(
-              'w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium',
-              conversation.type === 'group'
-                ? 'bg-muted text-muted-foreground'
-                : 'bg-primary/10 text-primary'
-            )}
-          >
-            {conversation.type === 'group' ? (
-              <Users size={18} />
-            ) : (
-              otherParticipants[0]?.name.charAt(0).toUpperCase()
+          {/* Avatar with online status */}
+          <div className="relative">
+            <div
+              className={cn(
+                'w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium',
+                conversation.type === 'group'
+                  ? 'bg-muted text-muted-foreground'
+                  : 'bg-primary/10 text-primary'
+              )}
+              data-testid="chat-avatar"
+            >
+              {conversation.type === 'group' ? (
+                <Users size={18} />
+              ) : (
+                partnerName?.charAt(0).toUpperCase()
+              )}
+            </div>
+            {/* Online status indicator on avatar */}
+            {conversation.type !== 'group' && (
+              <div className="absolute -bottom-0.5 -right-0.5">
+                <OnlineStatus status={partnerStatus} size="sm" />
+              </div>
             )}
           </div>
 
           <div>
-            <h2 className="font-semibold text-foreground">{conversation.name}</h2>
+            <h2 className="font-semibold text-foreground" data-testid="chat-partner-name">
+              {conversation.name}
+            </h2>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">
-                {conversation.type === 'group'
-                  ? `${conversation.participants.length} participants`
-                  : otherParticipants[0]?.status === 'online'
-                  ? 'Online'
-                  : 'Offline'}
-              </span>
+              {/* Show typing indicator or online status */}
+              {isPartnerTyping ? (
+                <TypingIndicator userName={partnerName} />
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <OnlineStatus status={partnerStatus} size="sm" showLabel />
+                </div>
+              )}
               {conversation.aiParticipant && (
                 <span className="flex items-center gap-1 text-xs text-ai">
                   <Sparkles size={10} />
                   AI active
-                </span>
-              )}
-              {isPartnerTyping && (
-                <span className="text-xs text-muted-foreground italic">
-                  typing...
                 </span>
               )}
             </div>
@@ -130,6 +141,7 @@ export function ChatArea({
               'h-8 gap-1.5 text-xs',
               conversation.aiEnabled ? 'text-ai' : 'text-muted-foreground'
             )}
+            data-testid="toggle-ai-btn"
           >
             {conversation.aiEnabled ? <Eye size={14} /> : <EyeOff size={14} />}
             AI {conversation.aiEnabled ? 'On' : 'Off'}
@@ -143,6 +155,7 @@ export function ChatArea({
               'h-8 gap-1.5 text-xs',
               showInsights ? 'text-primary bg-primary/10' : 'text-muted-foreground'
             )}
+            data-testid="toggle-insights-btn"
           >
             <Lightbulb size={14} />
             Insights
@@ -151,7 +164,10 @@ export function ChatArea({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
+      <div 
+        className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4"
+        data-testid="messages-container"
+      >
         {conversation.messages.map((message) => (
           <MessageBubble
             key={message.id}
@@ -160,6 +176,19 @@ export function ChatArea({
             isCurrentUser={message.senderId === currentUser.id}
           />
         ))}
+        
+        {/* Typing indicator at bottom of messages */}
+        {isPartnerTyping && (
+          <div className="flex items-start gap-2 animate-fade-in" data-testid="typing-indicator-message">
+            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-medium">
+              {partnerName?.charAt(0).toUpperCase()}
+            </div>
+            <div className="bg-muted rounded-2xl rounded-tl-sm px-4 py-2">
+              <TypingIndicator />
+            </div>
+          </div>
+        )}
+        
         <div ref={messagesEndRef} />
       </div>
 
@@ -168,7 +197,7 @@ export function ChatArea({
         onSendMessage={onSendMessage}
         aiEnabled={conversation.aiEnabled}
         onTypingStart={partnerId ? () => onTypingStart?.(partnerId) : undefined}
-        onTypingStop={partnerId ? (content) => onTypingStop?.(`${userId}:${partnerId}`,content) : undefined}
+        onTypingStop={partnerId ? (content) => onTypingStop?.(`${userId}:${partnerId}`, content) : undefined}
       />
     </div>
   );
