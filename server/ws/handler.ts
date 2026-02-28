@@ -299,6 +299,57 @@ function handleGetOnline(socket: AuthenticatedWs): void {
   send(socket, "presence:online_users", { users: getOnlineUsers() });
 }
 
+// ─── Content Insights Handler (User-Isolated) ─────────────────────────────────
+
+function handleGetContentInsights(
+  socket: AuthenticatedWs, 
+  data: ContentInsightRequestPayload
+): void {
+  const userId = socket.userId!;
+  const limit = Math.min(data?.limit ?? 10, 50); // Max 50 insights
+  
+  // Get ONLY this user's insights (strict isolation)
+  let insights = contentDetectionStore.getRecentInsights(userId, limit);
+  
+  // If conversationId provided, filter to that conversation
+  if (data?.conversationId) {
+    insights = insights.filter(i => i.conversationId === data.conversationId);
+  }
+  
+  // Return sanitized insights (remove content for privacy)
+  const sanitizedInsights = insights.map(insight => ({
+    messageId: insight.messageId,
+    timestamp: insight.timestamp,
+    conversationId: insight.conversationId,
+    detection: {
+      isProblematic: insight.detection.isProblematic,
+      flags: insight.detection.flags,
+      severity: insight.detection.severity,
+      suggestions: insight.detection.suggestions
+    }
+  }));
+  
+  send(socket, "content:insights", {
+    insights: sanitizedInsights,
+    total: insights.length,
+    timestamp: Date.now()
+  });
+}
+
+// ─── Pattern Alerts Handler (User-Isolated) ───────────────────────────────────
+
+function handleGetPatternAlerts(socket: AuthenticatedWs): void {
+  const userId = socket.userId!;
+  
+  // Get ONLY this user's alerts (strict isolation)
+  const alerts = contentDetectionStore.getPatternAlerts(userId);
+  
+  send(socket, "content:pattern_alerts", {
+    alerts,
+    timestamp: Date.now()
+  });
+}
+
 // ─── Message Send with Content Detection ─────────────────────────────────────
 
 async function handleMessageSendWithSentiment(
