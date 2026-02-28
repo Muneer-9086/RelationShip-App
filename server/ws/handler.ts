@@ -41,6 +41,9 @@ interface StreamingState {
   buffer: string;
 }
 
+type MessageDeliveryStatus = "sent" | "blocked";
+
+// Content detection request payloads
 // Content detection request payloads
 // Content detection event payloads (user-isolated)
 interface ContentFlaggedPayload {
@@ -65,6 +68,9 @@ interface ContentInsightRequestPayload {
   limit?: number;
 }
 
+interface PatternAlertsResponsePayload {
+  alerts: PatternAlert[];
+  timestamp: number;
 interface SafeDetectionPayload {
   isProblematic: boolean;
   flags: ContentDetectionResult["flags"];
@@ -292,7 +298,7 @@ export function handleConnection(ws: WebSocket): void {
     }
   });
 
-  socket.on("error", (err) => {
+  socket.on("error", (err: unknown) => {
     console.error("WebSocket error:", err);
     if (socket.userId) {
       store.unregisterUser(socket.userId);
@@ -512,7 +518,7 @@ async function handleMessageSendWithSentiment(
 async function handleMessageSend(
   socket: AuthenticatedWs,
   data: MessageSendPayload,
-  status: string = "sent",
+  status: MessageDeliveryStatus = "sent",
   messageId?: string
 ): Promise<void> {
   const senderId = socket.userId!;
@@ -753,8 +759,9 @@ async function handleAIMessage(
         activeStreams.delete(receiverId);
       }
     });
-  } catch (err: any) {
-    if (err?.name === "AbortError") {
+  } catch (err: unknown) {
+    const isAbortError = err instanceof Error && err.name === "AbortError";
+    if (isAbortError) {
       console.log("AI stream aborted for:", receiverId);
       send(socket, "ai:aborted", { receiver, timestamp: Date.now() });
     } else {
