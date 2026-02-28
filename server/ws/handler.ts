@@ -26,6 +26,10 @@ type AuthenticatedWs = WebSocket & { userId?: string };
 
 const activeStreams = new Map(); // key: receiverId → AbortController
 
+// Typing timeout map - auto-stops typing after 3 seconds of inactivity
+const typingTimeouts = new Map<string, NodeJS.Timeout>();
+const TYPING_TIMEOUT_MS = 3000;
+
 function send(ws: WebSocket, event: string, data?: unknown): void
 {
   if (ws.readyState !== 1) return;
@@ -68,10 +72,11 @@ function broadcastPresence(): void
 function broadcastUserOnline(userId: string): void
 {
   const online = getOnlineUsers();
+  const payload: PresenceUserOnlinePayload = { userId, timestamp: Date.now() };
   for (const id of online) {
     if (id === userId) continue;
     const ws = store.getWebSocket(id);
-    if (ws) send(ws, "presence:user_online", { userId });
+    if (ws) send(ws, "presence:user_online", payload);
   }
 }
 
@@ -79,9 +84,10 @@ function broadcastUserOnline(userId: string): void
 function broadcastUserOffline(userId: string): void
 {
   const online = getOnlineUsers().filter((id) => id !== userId);
+  const payload: PresenceUserOfflinePayload = { userId, timestamp: Date.now() };
   for (const id of online) {
     const ws = store.getWebSocket(id);
-    if (ws) send(ws, "presence:user_offline", { userId });
+    if (ws) send(ws, "presence:user_offline", payload);
   }
 }
 
