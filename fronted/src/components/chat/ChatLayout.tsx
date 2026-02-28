@@ -9,9 +9,10 @@ import { MessageSquare, Plus } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { mockInsights } from "@/data/mockData";
-import api from "@/lib/proxy"
-export function ChatLayout()
-{
+import api from "@/lib/proxy";
+import type { User } from "@/types/chat";
+
+export function ChatLayout() {
   const {
     userId,
     isConnected,
@@ -19,6 +20,7 @@ export function ChatLayout()
     conversations,
     activeConversationId,
     typingFrom,
+    onlineUsers,
     setConversations,
     connect,
     selectConversation,
