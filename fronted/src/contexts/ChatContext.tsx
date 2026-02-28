@@ -257,22 +257,36 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const key = getConversationKey(userId, peerId);
       const frontendMsg = backendToFrontendMessage(message);
 
-      let conv = convMapRef.current.get(key);
-
-      const dummyConversations = conversations.filter((conv) => {
-        if (conv.id === activeConversationId) {
-          return true;
-        }
-        return false;
-      });
-
-      if (!conv && dummyConversations.length > 0) {
-        conv = dummyConversations[0];
-        convMapRef.current.set(key, conv);
-      } else {
-        conv = convMapRef.current.get(key);
-        if (!conv) {
-          conv = {
+      setConversations((prev) => {
+        // Find existing conversation
+        const existingConvIndex = prev.findIndex((c) => c.id === key);
+        
+        if (existingConvIndex >= 0) {
+          // Update existing conversation
+          const existingConv = prev[existingConvIndex];
+          
+          // Check if message already exists (prevent duplicates)
+          const messageExists = existingConv.messages.some(m => m.id === frontendMsg.id);
+          if (messageExists) {
+            return prev;
+          }
+          
+          const updatedConv = {
+            ...existingConv,
+            messages: [...existingConv.messages, frontendMsg],
+            backendConversationId: conversationId ?? existingConv.backendConversationId,
+          };
+          
+          // Update convMapRef
+          convMapRef.current.set(key, updatedConv);
+          
+          // Return new array with updated conversation
+          const newConvs = [...prev];
+          newConvs[existingConvIndex] = updatedConv;
+          return newConvs;
+        } else {
+          // Create new conversation
+          const newConv: Conversation = {
             id: key,
             name: getPeerDisplayName(peerId),
             type: "direct",
@@ -281,32 +295,20 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               {
                 id: peerId,
                 name: getPeerDisplayName(peerId),
-                status: peerId === AI_USER_ID ? "online" : (isUserOnline(peerId) ? "online" : "offline"),
+                status: peerId === AI_USER_ID ? "online" : (onlineUsers.includes(peerId) ? "online" : "offline"),
               },
             ],
-            messages: [],
+            messages: [frontendMsg],
             unreadCount: 0,
             aiEnabled: peerId === AI_USER_ID,
             aiParticipant: peerId === AI_USER_ID,
             backendConversationId: conversationId,
           };
-          convMapRef.current.set(key, conv);
+          
+          convMapRef.current.set(key, newConv);
+          return [...prev, newConv];
         }
-      }
-      
-      setConversations((prev) =>
-        prev.some((c) => c.id === key) ? prev : [...prev, conv!]
-      );
-      
-      const updated = {
-        ...conv,
-        messages: [...conv.messages, frontendMsg],
-        backendConversationId: conversationId ?? conv.backendConversationId,
-      };
-      convMapRef.current.set(key, updated);
-      setConversations((prev) =>
-        prev.map((c) => (c.id === key ? updated : c))
-      );
+      });
     });
 
     // Typing start listener
