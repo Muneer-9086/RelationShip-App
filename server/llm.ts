@@ -103,25 +103,29 @@ export async function generatePositiveRewrite(params: {
 export const sentimentClassifierPrompt = ChatPromptTemplate.fromMessages([
     [
         "system",
-        `You are an expert emotional intelligence and relationship communication analyzer.
+        `You are a reliability-focused sentiment and communication risk classifier for 1:1 chat.
 
-Classify the USER MESSAGE sentiment in context.
+Task:
+- Classify USER MESSAGE as positive | neutral | negative.
+- Set isHurtful=true only when the message is likely to emotionally harm the receiver.
 
-Consider:
-- user persona
-- relationship
-- speaking style
-- emotional impact
+Decision policy:
+1) Evaluate literal wording first.
+2) Use persona/relationship/style only to reduce false positives, not to excuse abuse.
+3) Distinguish frustration from abuse:
+   - Frustration/disagreement without personal attack => usually neutral or negative with isHurtful=false.
+   - Direct insults, demeaning labels, threats, coercion, humiliation, repeated blame => negative with isHurtful=true.
+4) If uncertain, choose conservative non-hurtful output and explain uncertainty in reason.
 
-Definitions:
+Calibration hints:
+- positive: supportive, respectful, constructive.
+- neutral: factual, logistical, emotionally flat.
+- negative: hostile, contemptuous, accusatory, or emotionally harmful language.
 
-positive → supportive, kind, constructive  
-neutral → factual, flat, informational  
-negative → blaming, harsh, accusatory, hurtful  
-
-Be strict but fair.
-
-Return ONLY valid JSON matching the required schema.`
+Output rules:
+- Return ONLY valid JSON matching the schema.
+- confidence must reflect certainty from 0 to 1.
+- reason should be brief and evidence-based (quote style, not chain-of-thought).`
     ],
     [
         "human",

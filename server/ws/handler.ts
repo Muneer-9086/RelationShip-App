@@ -21,11 +21,11 @@ import {
   quickContentCheck, 
   contentDetectionStore,
   type ContentDetectionResult,
-  type UserContentInsight,
-  type PatternAlert
+  type UserContentInsight
 } from "../contentDetection";
 import mongoose from "mongoose";
 import ConversationMemory from "../model/aiMessage.model";
+import { randomUUID } from "crypto";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,31 +41,13 @@ interface StreamingState {
   buffer: string;
 }
 
-// Content detection event payloads (user-isolated)
-interface ContentFlaggedPayload {
-  messageId: string;
-  conversationId: string;
-  detection: ContentDetectionResult;
-  timestamp: number;
-}
-
-interface ContentBlockedPayload {
-  messageId: string;
-  conversationId: string;
-  reason: string;
-  suggestions: string[];
-  timestamp: number;
-}
-
-interface PatternAlertPayload {
-  alerts: PatternAlert[];
-  timestamp: number;
-}
+// Content detection request payloads
 
 interface ContentInsightRequestPayload {
   conversationId?: string;
   limit?: number;
 }
+
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -87,6 +69,17 @@ function parsePayload(raw: Buffer | string): WsPayload | null {
   } catch {
     return null;
   }
+}
+
+
+function validateMessagePayload(data: MessageSendPayload | null | undefined): data is MessageSendPayload {
+  return Boolean(
+    data &&
+    typeof data.receiverId === "string" &&
+    data.receiverId.trim().length > 0 &&
+    typeof data.content === "string" &&
+    data.content.trim().length > 0
+  );
 }
 
 export function getStore(): ChatStore {
@@ -254,6 +247,7 @@ export function handleConnection(ws: WebSocket): void {
       }
       
       store.unregisterUser(userId);
+      contentDetectionStore.clearSession(userId);
       broadcastTypingStop(userId);
       broadcastUserOffline(userId);
       broadcastPresence();
@@ -264,6 +258,7 @@ export function handleConnection(ws: WebSocket): void {
     console.error("WebSocket error:", err);
     if (socket.userId) {
       store.unregisterUser(socket.userId);
+      contentDetectionStore.clearSession(socket.userId);
     }
   });
 }
@@ -305,33 +300,14 @@ function handleGetContentInsights(
   socket: AuthenticatedWs, 
   data: ContentInsightRequestPayload
 ): void {
-  const userId = socket.userId!;
   const limit = Math.min(data?.limit ?? 10, 50); // Max 50 insights
-  
-  // Get ONLY this user's insights (strict isolation)
-  let insights = contentDetectionStore.getRecentInsights(userId, limit);
-  
-  // If conversationId provided, filter to that conversation
-  if (data?.conversationId) {
-    insights = insights.filter(i => i.conversationId === data.conversationId);
-  }
-  
-  // Return sanitized insights (remove content for privacy)
-  const sanitizedInsights = insights.map(insight => ({
-    messageId: insight.messageId,
-    timestamp: insight.timestamp,
-    conversationId: insight.conversationId,
-    detection: {
-      isProblematic: insight.detection.isProblematic,
-      flags: insight.detection.flags,
-      severity: insight.detection.severity,
-      suggestions: insight.detection.suggestions
-    }
-  }));
-  
+
+  // User should not receive internal moderation insights over WS.
   send(socket, "content:insights", {
-    insights: sanitizedInsights,
-    total: insights.length,
+    insights: [],
+    total: 0,
+    conversationId: data?.conversationId,
+    limit,
     timestamp: Date.now()
   });
 }
@@ -339,13 +315,9 @@ function handleGetContentInsights(
 // ─── Pattern Alerts Handler (User-Isolated) ───────────────────────────────────
 
 function handleGetPatternAlerts(socket: AuthenticatedWs): void {
-  const userId = socket.userId!;
-  
-  // Get ONLY this user's alerts (strict isolation)
-  const alerts = contentDetectionStore.getPatternAlerts(userId);
-  
+  // User should not receive internal moderation pattern alerts over WS.
   send(socket, "content:pattern_alerts", {
-    alerts,
+    alerts: [],
     timestamp: Date.now()
   });
 }
@@ -357,11 +329,22 @@ async function handleMessageSendWithSentiment(
   data: MessageSendPayload
 ): Promise<void> {
   const userId = socket.userId!;
-  const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const messageId = `msg_${randomUUID()}`;
+
+  if (!validateMessagePayload(data)) {
+    send(socket, "error", { message: "receiverId and content required" });
+    return;
+  }
+
+  const receiverId = data.receiverId.trim();
+  const content = data.content.trim();
+  const normalizedData: MessageSendPayload = { receiverId, content };
 
   try {
+    const conversation = await store.getOrCreateConversation(userId, receiverId, "human");
+
     // Step 1: Quick pattern check (fast, no AI)
-    const quickCheck = quickContentCheck(data.content);
+    const quickCheck = quickContentCheck(content);
 
     // Step 2: If critical pattern detected, block immediately
     if (quickCheck.estimatedSeverity === "critical") {
@@ -384,33 +367,22 @@ async function handleMessageSendWithSentiment(
         userId,
         messageId,
         timestamp: Date.now(),
-        content: data.content.substring(0, 100),
+        content: content.substring(0, 100),
         detection,
-        conversationId: `${userId}:${data.receiverId}`,
-        partnerId: data.receiverId
+        conversationId: conversation.conversationId,
+        partnerId: receiverId
       };
       contentDetectionStore.addInsight(userId, insight);
 
-      // Send blocked notification ONLY to sender
-      const blockedPayload: ContentBlockedPayload = {
-        messageId,
-        conversationId: `${userId}:${data.receiverId}`,
-        reason: detection.reason,
-        suggestions: detection.suggestions,
-        timestamp: Date.now()
-      };
-      send(socket, "content:blocked", blockedPayload);
-
-      // Still save message with blocked status (for sender's reference)
-      await handleMessageSend(socket, data, "blocked", messageId);
+      // Keep blocked insight server-side and save message with blocked status (not delivered to receiver)
+      await handleMessageSend(socket, normalizedData, "blocked", messageId);
       return;
     }
 
     // Step 3: If quick check found issues or message needs AI review
     if (quickCheck.requiresAICheck) {
       // Get conversation context for better analysis
-      const conv = await store.getOrCreateConversation(userId, data.receiverId, "human");
-      const recentMessages = conv.messages
+      const recentMessages = conversation.messages
         .slice(-3)
         .map(m => `${m.senderId === userId ? "You" : "Them"}: ${m.content}`)
         .join("\n");
@@ -419,67 +391,43 @@ async function handleMessageSendWithSentiment(
       const detection = await detectProblematicContent({
         userId,
         messageId,
-        content: data.content,
-        conversationId: conv.conversationId,
-        partnerId: data.receiverId,
+        content,
+        conversationId: conversation.conversationId,
+        partnerId: receiverId,
         context: recentMessages
       });
 
       // If should block
       if (detection.shouldBlock) {
-        const blockedPayload: ContentBlockedPayload = {
-          messageId,
-          conversationId: conv.conversationId,
-          reason: detection.reason,
-          suggestions: detection.suggestions,
-          timestamp: Date.now()
-        };
-        send(socket, "content:blocked", blockedPayload);
-        await handleMessageSend(socket, data, "blocked", messageId);
+        await handleMessageSend(socket, normalizedData, "blocked", messageId);
         return;
       }
 
-      // If problematic but not blocking, send warning to SENDER ONLY
+      // If problematic but not blocking, keep server-side insight only.
       if (detection.isProblematic) {
-        const flaggedPayload: ContentFlaggedPayload = {
-          messageId,
-          conversationId: conv.conversationId,
-          detection,
-          timestamp: Date.now()
-        };
-        // Send ONLY to the sender (user-isolated)
-        send(socket, "content:flagged", flaggedPayload);
-
-        // Check for pattern alerts
-        const alerts = contentDetectionStore.getPatternAlerts(userId);
-        if (alerts.length > 0) {
-          send(socket, "content:pattern_alert", {
-            alerts,
-            timestamp: Date.now()
-          } as PatternAlertPayload);
-        }
+        // Intentionally do not emit moderation insights to sender via WS.
       }
 
       // Send the message
-      await handleMessageSend(socket, data, "sent", messageId);
+      await handleMessageSend(socket, normalizedData, "sent", messageId);
     } else {
       // No issues detected, send normally
-      await handleMessageSend(socket, data, "sent", messageId);
+      await handleMessageSend(socket, normalizedData, "sent", messageId);
     }
 
   } catch (err) {
     console.error("Content detection error:", err);
     // On error, fall back to basic sentiment check
     try {
-      const result = await classifyMessageSentiment({ message: data.content });
+      const result = await classifyMessageSentiment({ message: content });
       if (result.sentiment === "negative" && result.isHurtful) {
-        await handleMessageSend(socket, data, "blocked", messageId);
+        await handleMessageSend(socket, normalizedData, "blocked", messageId);
       } else {
-        await handleMessageSend(socket, data, "sent", messageId);
+        await handleMessageSend(socket, normalizedData, "sent", messageId);
       }
     } catch {
       // Final fallback: send the message
-      await handleMessageSend(socket, data, "sent", messageId);
+      await handleMessageSend(socket, normalizedData, "sent", messageId);
     }
   }
 }
@@ -492,17 +440,13 @@ async function handleMessageSend(
 ): Promise<void> {
   const senderId = socket.userId!;
 
-  if (!data?.receiverId || typeof data.content !== "string") {
+  if (!validateMessagePayload(data)) {
     send(socket, "error", { message: "receiverId and content required" });
     return;
   }
 
-  const receiverId = data.receiverId;
+  const receiverId = data.receiverId.trim();
   const content = data.content.trim();
-  if (!content) {
-    send(socket, "error", { message: "content required" });
-    return;
-  }
 
   const isAIMode = receiverId === ChatStore.AI_USER_ID;
   const mode = isAIMode ? "ai" : "human";
@@ -532,7 +476,6 @@ async function handleMessageSend(
     const senderPayload = {
       message: msg,
       conversationId: conv.conversationId,
-      status,
       channel: "human"
     };
     send(socket, "message:receive", senderPayload);
@@ -852,11 +795,8 @@ function handleDisconnect(socket: AuthenticatedWs): void {
       }
     }
     
-    // Note: We do NOT clear content detection session on disconnect
-    // as users may reconnect and want to see their history
-    // Session cleanup is handled by TTL in contentDetectionStore
-    
     store.unregisterUser(userId);
+    contentDetectionStore.clearSession(userId);
     broadcastTypingStop(userId);
     broadcastUserOffline(userId);
     broadcastPresence();
