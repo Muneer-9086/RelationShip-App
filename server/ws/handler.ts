@@ -401,13 +401,16 @@ function handleTypingStart(socket: AuthenticatedWs, data: TypingStartPayload): v
 
 async function handleTypingStop(
   socket: AuthenticatedWs,
-  data: { partnerId: string; content?: string }
+  data: TypingStopPayload
 ): Promise<void>
 {
   const userId = socket.userId!;
   const partnerId = data?.partnerId;
 
   if (!partnerId) return;
+
+  // Clear the auto-stop timeout
+  clearTypingTimeout(userId, partnerId);
 
   let conversationPartner = store.getLastTypeContent(partnerId);
   if (!conversationPartner) {
@@ -423,7 +426,8 @@ async function handleTypingStop(
   store.setTyping(userId, partnerId, false);
   const partnerWs = store.getWebSocket(partnerId);
   if (partnerWs) {
-    send(partnerWs, "typing:stop", { userId, isTyping: false });
+    const payload: TypingIndicatorPayload = { userId, isTyping: false, timestamp: Date.now() };
+    send(partnerWs, "typing:stop", payload);
   }
 
   const content = data?.content?.trim();
