@@ -21,8 +21,7 @@ import {
   quickContentCheck, 
   contentDetectionStore,
   type ContentDetectionResult,
-  type UserContentInsight,
-  type PatternAlert
+  type UserContentInsight
 } from "../contentDetection";
 import mongoose from "mongoose";
 import ConversationMemory from "../model/aiMessage.model";
@@ -45,6 +44,14 @@ interface StreamingState {
 type MessageDeliveryStatus = "sent" | "blocked";
 
 // Content detection request payloads
+// Content detection request payloads
+// Content detection event payloads (user-isolated)
+interface ContentFlaggedPayload {
+  messageId: string;
+  conversationId: string;
+  detection: SafeDetectionPayload;
+  timestamp: number;
+}
 
 interface ContentInsightRequestPayload {
   conversationId?: string;
@@ -54,6 +61,24 @@ interface ContentInsightRequestPayload {
 interface PatternAlertsResponsePayload {
   alerts: PatternAlert[];
   timestamp: number;
+}
+
+interface ContentInsightRequestPayload {
+  conversationId?: string;
+  limit?: number;
+}
+
+interface PatternAlertsResponsePayload {
+  alerts: PatternAlert[];
+  timestamp: number;
+interface SafeDetectionPayload {
+  isProblematic: boolean;
+  flags: ContentDetectionResult["flags"];
+  severity: ContentDetectionResult["severity"];
+  confidence: number;
+  reason: string;
+  suggestions: string[];
+  shouldBlock: boolean;
 }
 
 // ─── State ────────────────────────────────────────────────────────────────────
@@ -78,6 +103,18 @@ function parsePayload(raw: Buffer | string): WsPayload | null {
   }
 }
 
+
+function buildSafeDetectionPayload(detection: ContentDetectionResult): SafeDetectionPayload {
+  return {
+    isProblematic: detection.isProblematic,
+    flags: detection.flags,
+    severity: detection.severity,
+    confidence: detection.confidence,
+    reason: detection.reason,
+    suggestions: detection.suggestions,
+    shouldBlock: detection.shouldBlock
+  };
+}
 
 function validateMessagePayload(data: MessageSendPayload | null | undefined): data is MessageSendPayload {
   return Boolean(
@@ -324,6 +361,7 @@ function handleGetContentInsights(
 function handleGetPatternAlerts(socket: AuthenticatedWs): void {
   // User should not receive internal moderation pattern alerts over WS.
   const payload: PatternAlertsResponsePayload = {
+  send(socket, "content:pattern_alerts", {
     alerts: [],
     timestamp: Date.now()
   };
@@ -384,6 +422,17 @@ async function handleMessageSendWithSentiment(
       contentDetectionStore.addInsight(userId, insight);
 
       // Keep blocked insight server-side and save message with blocked status (not delivered to receiver)
+      // Send blocked notification ONLY to sender
+      const blockedPayload: ContentBlockedPayload = {
+        messageId,
+        conversationId: conversation.conversationId,
+        reason: detection.reason,
+        suggestions: detection.suggestions,
+        timestamp: Date.now()
+      };
+      send(socket, "content:blocked", blockedPayload);
+
+      // Still save message with blocked status (for sender's reference)
       await handleMessageSend(socket, normalizedData, "blocked", messageId);
       return;
     }
@@ -408,6 +457,14 @@ async function handleMessageSendWithSentiment(
 
       // If should block
       if (detection.shouldBlock) {
+        const blockedPayload: ContentBlockedPayload = {
+          messageId,
+          conversationId: conversation.conversationId,
+          reason: detection.reason,
+          suggestions: detection.suggestions,
+          timestamp: Date.now()
+        };
+        send(socket, "content:blocked", blockedPayload);
         await handleMessageSend(socket, normalizedData, "blocked", messageId);
         return;
       }
@@ -415,6 +472,23 @@ async function handleMessageSendWithSentiment(
       // If problematic but not blocking, keep server-side insight only.
       if (detection.isProblematic) {
         // Intentionally do not emit moderation insights to sender via WS.
+        const flaggedPayload: ContentFlaggedPayload = {
+          messageId,
+          conversationId: conversation.conversationId,
+          detection: buildSafeDetectionPayload(detection),
+          timestamp: Date.now()
+        };
+        // Send ONLY to the sender (user-isolated)
+        send(socket, "content:flagged", flaggedPayload);
+
+        // Check for pattern alerts
+        const alerts = contentDetectionStore.getPatternAlerts(userId);
+        if (alerts.length > 0) {
+          send(socket, "content:pattern_alert", {
+            alerts,
+            timestamp: Date.now()
+          } as PatternAlertPayload);
+        }
       }
 
       // Send the message
