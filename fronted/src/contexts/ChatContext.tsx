@@ -79,6 +79,7 @@ interface ChatContextValue {
   activeConversationId: string | null;
   typingFrom: TypingState;
   onlineUsers: string[];
+  contentAlerts: ContentAlert[];
   connect: (userId: string) => void;
   disconnect: () => void;
   selectConversation: (id: string | null) => void;
@@ -96,6 +97,8 @@ interface ChatContextValue {
   stopAIStream: (receiverId: string) => void;
   isUserOnline: (userId: string) => boolean;
   getTypingUsers: (conversationId: string) => string[];
+  dismissContentAlert: (alertId: string) => void;
+  clearContentAlerts: () => void;
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
