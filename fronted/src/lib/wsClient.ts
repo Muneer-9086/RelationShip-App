@@ -37,6 +37,13 @@ export type WsEvent =
   | "presence:user_offline"
   | "presence:get_online"
   | "connection:state"
+  | "content:flagged"
+  | "content:blocked"
+  | "content:pattern_alert"
+  | "content:insights"
+  | "content:pattern_alerts"
+  | "content:get_insights"
+  | "content:get_alerts"
   | "*";
 
 export interface WsPayload<T = unknown> {
