@@ -1,63 +1,60 @@
-import { ConversationInsights, ParticipantInsight, User } from '@/types/chat';
-import
-  {
-    X, TrendingUp, MessageCircle, ThumbsUp, Lightbulb, Heart, Send, Bot,
-    User as UserIcon, ChevronLeft, AlertTriangle, RefreshCw, Brain,
-    Eye, BarChart2, Wand2, Sparkles, CheckCircle2, ChevronDown, ChevronUp
-  } from 'lucide-react';
+import type { ConversationInsights, ParticipantInsight, User } from '@/types/chat';
+import {
+  X, TrendingUp, MessageCircle, ThumbsUp, Lightbulb, Heart, Send, Bot,
+  User as UserIcon, ChevronLeft, AlertTriangle, RefreshCw, Brain,
+  Eye, BarChart2, Wand2, Sparkles, CheckCircle2, ChevronDown, ChevronUp, StopCircle
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { useState, useRef, useEffect,useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useChat } from "@/contexts/ChatContext";
-import api from "@/lib/proxy"
+import api from "@/lib/proxy";
+import type { AITokenPayload, AIDonePayload, AIStreamStartPayload, AIAbortedPayload, AIErrorPayload } from "@/lib/wsClient";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-
-
-interface InsightsPanelProps
-{
+interface InsightsPanelProps {
   insights: ConversationInsights;
   participants: User[];
   onClose: () => void;
   converstationId: string;
-  /** Optional: raw messages to power highlight & thought-process views */
   rawMessages?: RawMessage[];
 }
 
-export interface RawMessage
-{
+export interface RawMessage {
   id: string;
   senderId: string;
   text: string;
   timestamp: Date;
-  /** Injected by analysis layer */
   positiveSpans?: string[];
   negativeSpans?: string[];
   thoughtProcess?: string;
   underlyingNeed?: string;
 }
 
-// ─── Utility ──────────────────────────────────────────────────────────────────
+interface ChatMessage {
+  id: string;
+  role: "ai" | "user";
+  text: string;
+  timestamp: Date;
+  isStreaming?: boolean;
+}
 
-function formatTime(date: Date)
-{
+// ─── Utility Functions ────────────────────────────────────────────────────────
+
+function formatTime(date: Date): string {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function highlightText(text: string, positive: string[], negative: string[])
-{
-  // Simple word-level highlight — replace matched spans with <mark>
+function highlightText(text: string, positive: string[], negative: string[]): string {
   let result = text;
-  positive.forEach((p) =>
-  {
+  positive.forEach((p) => {
     result = result.replace(
       new RegExp(`(${p})`, 'gi'),
       '<mark class="highlight-positive">$1</mark>'
     );
   });
-  negative.forEach((n) =>
-  {
+  negative.forEach((n) => {
     result = result.replace(
       new RegExp(`(${n})`, 'gi'),
       '<mark class="highlight-negative">$1</mark>'
@@ -66,17 +63,15 @@ function highlightText(text: string, positive: string[], negative: string[])
   return result;
 }
 
-// ─── Pre-Send Warning Banner ──────────────────────────────────────────────────
+// ─── Warning Banner ───────────────────────────────────────────────────────────
 
-interface WarnBannerProps
-{
+interface WarnBannerProps {
   text: string;
   onRephrase: () => void;
   onDismiss: () => void;
 }
 
-function WarnBanner({ text, onRephrase, onDismiss }: WarnBannerProps)
-{
+function WarnBanner({ text, onRephrase, onDismiss }: WarnBannerProps): JSX.Element {
   return (
     <div className="warn-banner animate-slide-up">
       <div className="flex items-start gap-2 mb-2">
@@ -95,18 +90,16 @@ function WarnBanner({ text, onRephrase, onDismiss }: WarnBannerProps)
   );
 }
 
-// ─── Rephrase Suggestions ─────────────────────────────────────────────────────
+// ─── Rephrase Panel ───────────────────────────────────────────────────────────
 
-interface RephrasePanelProps
-{
+interface RephrasePanelProps {
   original: string;
   suggestions: string[];
   onPick: (s: string) => void;
   onBack: () => void;
-  converstationId: string,
-  userMessage:string
+  converstationId: string;
+  userMessage: string;
 }
-
 
 function RephrasePanel({
   userMessage,
@@ -114,35 +107,26 @@ function RephrasePanel({
   converstationId,
   onPick,
   onBack
-}: RephrasePanelProps) {
+}: RephrasePanelProps): JSX.Element {
   const [loading, setLoading] = useState(false);
-  const [apiData, setApiData] = useState<any | null>(null);
-
-  /* =======================================================
-     🔹 FETCH SUGGESTIONS
-  ======================================================= */
+  const [apiData, setApiData] = useState<{
+    aiRewriteSuggestion?: string[];
+    tone?: string;
+    reason?: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!converstationId) return;
 
-    const init = async () => {
+    const init = async (): Promise<void> => {
       try {
-        console.log("Rephrase Panel mounted…");
-        console.log(`conversationId: ${converstationId}`);
-
         setLoading(true);
-
         const response = await api.get(
           `/api/chat/converstation/rephase/suggestion?conversationId=${converstationId}`
         );
-
-        const data = response.data;
-
-        console.log("REPHRASE DATA:", data);
-
-        setApiData(data);
+        setApiData(response.data);
       } catch (err) {
-        console.log("Error: Rephrase Panel", err);
+        console.error("Error: Rephrase Panel", err);
       } finally {
         setLoading(false);
       }
@@ -150,10 +134,6 @@ function RephrasePanel({
 
     init();
   }, [converstationId]);
-
-  /* =======================================================
-     🔹 LOADING
-  ======================================================= */
 
   if (loading) {
     return (
@@ -163,43 +143,27 @@ function RephrasePanel({
     );
   }
 
-  /* =======================================================
-     🔹 DATA SOURCE (API → fallback)
-  ======================================================= */
-
-  const finalSuggestions =
-    apiData?.aiRewriteSuggestion?.length
-      ? apiData.aiRewriteSuggestion
-      : suggestions;
-
-  /* =======================================================
-     🔹 UI
-  ======================================================= */
+  const finalSuggestions = apiData?.aiRewriteSuggestion?.length
+    ? apiData.aiRewriteSuggestion
+    : suggestions;
 
   return (
     <div className="rephrase-panel panel-slide-in">
-      {/* 🔙 Back */}
       <button className="back-btn" onClick={onBack}>
         <ChevronLeft size={13} /> Back
       </button>
 
-      {/* 📝 Original */}
-      <p className="text-[10px] text-muted-foreground mb-1 mt-3">
-        Original
-      </p>
+      <p className="text-[10px] text-muted-foreground mb-1 mt-3">Original</p>
       <div className="original-bubble">{userMessage}</div>
 
-      {/* ✨ Header */}
       <p className="text-[10px] text-ai font-semibold mb-2 mt-4 flex items-center gap-1">
         <Sparkles size={10} /> Suggested rephrases
       </p>
 
-      {/* 🧠 Tone + Reason */}
       {apiData && (
         <div className="mb-3 space-y-1">
           <p className="text-[10px] text-muted-foreground">
-            Tone:{" "}
-            <span className="font-semibold">{apiData.tone}</span>
+            Tone: <span className="font-semibold">{apiData.tone}</span>
           </p>
           <p className="text-[10px] text-muted-foreground leading-relaxed">
             {apiData.reason}
@@ -207,20 +171,13 @@ function RephrasePanel({
         </div>
       )}
 
-      {/* 💡 Suggestions */}
       <ul className="space-y-2">
         {finalSuggestions.map((s, i) => (
           <li key={i}>
-            <button
-              className="rephrase-option"
-              onClick={() => onPick(s)}
-            >
+            <button className="rephrase-option" onClick={() => onPick(s)}>
               <span className="rephrase-num">{i + 1}</span>
               <span className="text-xs leading-relaxed">{s}</span>
-              <CheckCircle2
-                size={12}
-                className="ml-auto text-positive flex-shrink-0"
-              />
+              <CheckCircle2 size={12} className="ml-auto text-positive flex-shrink-0" />
             </button>
           </li>
         ))}
@@ -229,17 +186,15 @@ function RephrasePanel({
   );
 }
 
-// ─── Message Highlight View ────────────────────────────────────────────────────
+// ─── Highlight View ───────────────────────────────────────────────────────────
 
-interface HighlightViewProps
-{
+interface HighlightViewProps {
   messages: RawMessage[];
   participants: User[];
 }
 
-function HighlightView({ messages, participants }: HighlightViewProps)
-{
-  const getUser = (id: string) => participants.find((p) => p.id === id);
+function HighlightView({ messages, participants }: HighlightViewProps): JSX.Element {
+  const getUser = (id: string): User | undefined => participants.find((p) => p.id === id);
 
   return (
     <div className="space-y-4 p-4">
@@ -249,8 +204,7 @@ function HighlightView({ messages, participants }: HighlightViewProps)
         <span className="legend-dot bg-negative-bg border border-negative/30 ml-3" />
         <span className="text-[10px] text-muted-foreground">Negative</span>
       </div>
-      {messages.map((msg) =>
-      {
+      {messages.map((msg) => {
         const user = getUser(msg.senderId);
         const highlighted = highlightText(
           msg.text,
@@ -275,23 +229,20 @@ function HighlightView({ messages, participants }: HighlightViewProps)
   );
 }
 
-// ─── Thought Process View ─────────────────────────────────────────────────────
+// ─── Thought View ─────────────────────────────────────────────────────────────
 
-interface ThoughtViewProps
-{
+interface ThoughtViewProps {
   messages: RawMessage[];
   participants: User[];
 }
 
-function ThoughtView({ messages, participants }: ThoughtViewProps)
-{
+function ThoughtView({ messages, participants }: ThoughtViewProps): JSX.Element {
   const [expanded, setExpanded] = useState<string | null>(null);
-  const getUser = (id: string) => participants.find((p) => p.id === id);
+  const getUser = (id: string): User | undefined => participants.find((p) => p.id === id);
 
   return (
     <div className="space-y-3 p-4">
-      {messages.map((msg) =>
-      {
+      {messages.map((msg) => {
         const user = getUser(msg.senderId);
         const isOpen = expanded === msg.id;
         return (
@@ -339,16 +290,14 @@ function ThoughtView({ messages, participants }: ThoughtViewProps)
   );
 }
 
-// ─── Growth Report ─────────────────────────────────────────────────────────────
+// ─── Growth Report ────────────────────────────────────────────────────────────
 
-interface GrowthReportProps
-{
+interface GrowthReportProps {
   insights: ConversationInsights;
   participants: User[];
 }
 
-function GrowthReport({ insights, participants }: GrowthReportProps)
-{
+function GrowthReport({ insights, participants }: GrowthReportProps): JSX.Element {
   return (
     <div className="space-y-5 p-4">
       <div className="growth-header">
@@ -359,8 +308,7 @@ function GrowthReport({ insights, participants }: GrowthReportProps)
         </div>
       </div>
 
-      {insights.participants.map((p) =>
-      {
+      {insights.participants.map((p) => {
         const user = participants.find((u) => u.id === p.userId);
         if (!user) return null;
         return (
@@ -412,80 +360,168 @@ function GrowthReport({ insights, participants }: GrowthReportProps)
   );
 }
 
+// ─── AI Chat Modal with Streaming Support ─────────────────────────────────────
 
-
-type ChatMessage = {
-  id: string;
-  role: "ai" | "user";
-  text: string;
-  timestamp: Date;
-};
-
-
-
-export default function AIChatModal({ onClose }: { onClose: () => void }) {
+function AIChatModal({ onClose }: { onClose: () => void }): JSX.Element {
   const {
     userId,
     conversations,
     activeConversationId,
     connect,
     sendMessageAI,
+    client,
   } = useChat();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const chatRoomIdRef = useRef<string>("");
+  const currentReceiverRef = useRef<string>("");
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() =>
-  {
+  // Scroll to bottom when messages change
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isTyping]);
+  }, [messages, isStreaming]);
 
+  // Focus input on mount
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
-  const mapApiMessages = (apiMessages: any[]): ChatMessage[] => {
+  // Map API messages to chat messages
+  const mapApiMessages = (apiMessages: Array<{
+    _id: string;
+    senderType: string;
+    content: string;
+    createdAt: string;
+    channel?: string;
+  }>): ChatMessage[] => {
     return apiMessages.map((msg) => ({
       id: msg._id,
-      role: msg.senderType === "ai" || msg.channel === "ai" ? "ai" : "user",
+      role: msg.senderType === "ai" || msg.channel === "ai" ? "ai" as const : "user" as const,
       text: msg.content,
       timestamp: new Date(msg.createdAt),
     }));
   };
 
-  const sendMessage = () => {
-    const trimmed = input.trim();
-    if (!trimmed) return;
-
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: Date.now().toString(),
-        role: "user",
-        text: trimmed,
-        timestamp: new Date(),
-      },
-    ]);
-
-    sendMessageAI(`${chatRoomIdRef.current}:${userId}`, trimmed);
-    setInput("");
-    setIsTyping(true); 
-  };
-
+  // Handle connection
   const handleConnect = useCallback(
-    (uid: string) => {
+    (uid: string | null) => {
       if (uid) connect(uid);
     },
     [connect]
   );
 
+  // Set up WebSocket listeners for streaming
   useEffect(() => {
-    const init = async () => {
+    if (!client) return;
+
+    // Stream start
+    const unsubStreamStart = client.on("ai:stream_start", (data: unknown) => {
+      const payload = data as AIStreamStartPayload;
+      if (payload.receiver === currentReceiverRef.current) {
+        setIsStreaming(true);
+        const newMsgId = `streaming-${Date.now()}`;
+        setStreamingMessageId(newMsgId);
+        
+        // Add placeholder message for streaming
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: newMsgId,
+            role: "ai",
+            text: "",
+            timestamp: new Date(),
+            isStreaming: true,
+          },
+        ]);
+      }
+    });
+
+    // Token received
+    const unsubToken = client.on("ai:token", (data: unknown) => {
+      const payload = data as AITokenPayload;
+      if (payload.receiver === currentReceiverRef.current && streamingMessageId) {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === streamingMessageId
+              ? { ...msg, text: msg.text + payload.chunk }
+              : msg
+          )
+        );
+      }
+    });
+
+    // Stream complete
+    const unsubDone = client.on("ai:done", (data: unknown) => {
+      const payload = data as AIDonePayload;
+      if (payload.receiver === currentReceiverRef.current) {
+        setIsStreaming(false);
+        setStreamingMessageId(null);
+        
+        // Update the streaming message with final content
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.isStreaming
+              ? { ...msg, text: payload.content, isStreaming: false }
+              : msg
+          )
+        );
+      }
+    });
+
+    // Stream aborted
+    const unsubAborted = client.on("ai:aborted", (data: unknown) => {
+      const payload = data as AIAbortedPayload;
+      if (payload.receiver === currentReceiverRef.current) {
+        setIsStreaming(false);
+        setStreamingMessageId(null);
+        
+        // Mark as aborted
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.isStreaming
+              ? { ...msg, text: msg.text + " [Stopped]", isStreaming: false }
+              : msg
+          )
+        );
+      }
+    });
+
+    // Stream error
+    const unsubError = client.on("ai:error", (data: unknown) => {
+      const payload = data as AIErrorPayload;
+      if (payload.receiver === currentReceiverRef.current) {
+        setIsStreaming(false);
+        setStreamingMessageId(null);
+        
+        // Show error message
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.isStreaming
+              ? { ...msg, text: "Sorry, something went wrong. Please try again.", isStreaming: false }
+              : msg
+          )
+        );
+      }
+    });
+
+    return () => {
+      unsubStreamStart();
+      unsubToken();
+      unsubDone();
+      unsubAborted();
+      unsubError();
+    };
+  }, [client, streamingMessageId]);
+
+  // Load initial messages
+  useEffect(() => {
+    const init = async (): Promise<void> => {
       try {
         handleConnect(userId);
 
@@ -512,7 +548,8 @@ export default function AIChatModal({ onClose }: { onClose: () => void }) {
           (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
         );
 
-        chatRoomIdRef.current=response.data.chatRoomId;
+        chatRoomIdRef.current = response.data.chatRoomId;
+        currentReceiverRef.current = `${response.data.chatRoomId}:${currentConversationId}`;
 
         setMessages(normalized);
       } catch (err) {
@@ -525,8 +562,36 @@ export default function AIChatModal({ onClose }: { onClose: () => void }) {
     }
   }, [userId, activeConversationId, conversations, handleConnect]);
 
+  // Send message
+  const sendMessage = (): void => {
+    const trimmed = input.trim();
+    if (!trimmed || isStreaming) return;
+
+    // Add user message
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: Date.now().toString(),
+        role: "user",
+        text: trimmed,
+        timestamp: new Date(),
+      },
+    ]);
+
+    // Send via WebSocket
+    sendMessageAI(currentReceiverRef.current, trimmed);
+    setInput("");
+  };
+
+  // Stop streaming
+  const stopStreaming = (): void => {
+    if (client && currentReceiverRef.current) {
+      client.stopAIStream(currentReceiverRef.current);
+    }
+  };
+
   return (
-    <div className="h-full flex flex-col bg-card panel-slide-in">
+    <div className="h-full flex flex-col bg-card panel-slide-in" data-testid="ai-chat-modal">
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
         <Button
@@ -534,6 +599,7 @@ export default function AIChatModal({ onClose }: { onClose: () => void }) {
           size="sm"
           className="h-7 w-7 p-0 mr-1"
           onClick={onClose}
+          data-testid="ai-chat-close-btn"
         >
           <ChevronLeft size={16} />
         </Button>
@@ -545,14 +611,17 @@ export default function AIChatModal({ onClose }: { onClose: () => void }) {
         <div>
           <h3 className="font-semibold text-sm">AI Assistant</h3>
           <p className="text-[10px] text-muted-foreground flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-positive inline-block" />
-            Online
+            <span className={cn(
+              "w-1.5 h-1.5 rounded-full inline-block",
+              isStreaming ? "bg-amber-500 animate-pulse" : "bg-positive"
+            )} />
+            {isStreaming ? "Thinking..." : "Online"}
           </p>
         </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4" data-testid="ai-chat-messages">
         {messages.map((msg) => (
           <div
             key={msg.id}
@@ -584,33 +653,23 @@ export default function AIChatModal({ onClose }: { onClose: () => void }) {
                   : "bg-primary text-primary-foreground rounded-br-sm"
               )}
             >
-              <p>{msg.text}</p>
-              <p
-                className={cn(
-                  "text-[9px] mt-1 opacity-60",
-                  msg.role === "user" ? "text-right" : "text-left"
-                )}
-              >
-                {formatTime(msg.timestamp)}
+              <p className={cn(msg.isStreaming && "animate-pulse")}>
+                {msg.text || (msg.isStreaming ? "..." : "")}
+                {msg.isStreaming && <span className="inline-block w-1 h-3 bg-ai ml-0.5 animate-pulse" />}
               </p>
+              {!msg.isStreaming && (
+                <p
+                  className={cn(
+                    "text-[9px] mt-1 opacity-60",
+                    msg.role === "user" ? "text-right" : "text-left"
+                  )}
+                >
+                  {formatTime(msg.timestamp)}
+                </p>
+              )}
             </div>
           </div>
         ))}
-
-        {isTyping && (
-          <div className="flex items-end gap-2">
-            <div className="w-6 h-6 rounded-full gradient-insight flex-shrink-0 flex items-center justify-center">
-              <Bot size={12} className="text-ai" />
-            </div>
-            <div className="bg-muted rounded-2xl rounded-bl-sm px-3 py-2.5">
-              <div className="flex gap-1 items-center h-3">
-                <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce" />
-                <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:150ms]" />
-                <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:300ms]" />
-              </div>
-            </div>
-          </div>
-        )}
 
         <div ref={bottomRef} />
       </div>
@@ -628,46 +687,57 @@ export default function AIChatModal({ onClose }: { onClose: () => void }) {
               sendMessage();
             }
           }}
-          placeholder="Ask about the conversation..."
-          className="flex-1 text-xs bg-muted border border-border rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-primary/40 placeholder:text-muted-foreground/60"
+          placeholder={isStreaming ? "Wait for response..." : "Ask about the conversation..."}
+          disabled={isStreaming}
+          className="flex-1 text-xs bg-muted border border-border rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-primary/40 placeholder:text-muted-foreground/60 disabled:opacity-50"
+          data-testid="ai-chat-input"
         />
 
-        <Button
-          size="sm"
-          className="h-8 w-8 p-0 flex-shrink-0"
-          onClick={sendMessage}
-          disabled={!input.trim()}
-        >
-          <Send size={13} />
-        </Button>
+        {isStreaming ? (
+          <Button
+            size="sm"
+            variant="destructive"
+            className="h-8 w-8 p-0 flex-shrink-0"
+            onClick={stopStreaming}
+            data-testid="ai-chat-stop-btn"
+          >
+            <StopCircle size={13} />
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            className="h-8 w-8 p-0 flex-shrink-0"
+            onClick={sendMessage}
+            disabled={!input.trim()}
+            data-testid="ai-chat-send-btn"
+          >
+            <Send size={13} />
+          </Button>
+        )}
       </div>
     </div>
   );
 }
 
+// ─── Composer Guard ───────────────────────────────────────────────────────────
 
-interface ComposerGuardProps
-{
+interface ComposerGuardProps {
   draft: string;
   onClear: () => void;
   converstationId: string;
 }
 
-function ComposerGuard({ draft, converstationId, onClear }: ComposerGuardProps)
-{
+function ComposerGuard({ draft, converstationId, onClear }: ComposerGuardProps): JSX.Element | null {
   const [step, setStep] = useState<'warn' | 'rephrase' | null>(null);
   const [loading, setLoading] = useState(false);
   const [hidden, setHidden] = useState(false);
   const [userMessage, setUserMessage] = useState<string>("");
 
-
-  useEffect(() =>
-  {
-    const init = async () =>
-    {
+  useEffect(() => {
+    const init = async (): Promise<void> => {
       try {
         setLoading(true);
-        const response = await api.get(`/api/chat/converstation/rephrase?converstationId=${converstationId}`)
+        const response = await api.get(`/api/chat/converstation/rephrase?converstationId=${converstationId}`);
         const data = response.data;
         if (data.lastMessageIsBlocked) {
           setStep('warn');
@@ -675,28 +745,21 @@ function ComposerGuard({ draft, converstationId, onClear }: ComposerGuardProps)
             setHidden(false);
           }
           setUserMessage(data.lastMessage);
-        }
-        else {
+        } else {
           setHidden(true);
         }
-      }
-      catch (err) {
-        console.log("COMPOSE GAURD ERROR");
-      }
-      finally {
+      } catch (err) {
+        console.error("COMPOSE GUARD ERROR", err);
+      } finally {
         setLoading(false);
       }
-
-    }
+    };
     init();
-  }, [])
-
-
+  }, [converstationId, hidden]);
 
   const mockWarning = draft.length > 10 ? "This message may come across as dismissive. Consider softening your tone." : null;
 
   if (hidden) return null;
-
 
   if (step === 'rephrase') {
     return (
@@ -711,6 +774,8 @@ function ComposerGuard({ draft, converstationId, onClear }: ComposerGuardProps)
     );
   }
 
+  if (!mockWarning) return null;
+
   return (
     <WarnBanner
       text={mockWarning}
@@ -720,6 +785,7 @@ function ComposerGuard({ draft, converstationId, onClear }: ComposerGuardProps)
   );
 }
 
+// ─── Tab Types ────────────────────────────────────────────────────────────────
 
 type Tab = 'insights' | 'highlights' | 'thoughts' | 'report';
 
@@ -730,26 +796,33 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'report', label: 'Report', icon: <BarChart2 size={12} /> },
 ];
 
+// ─── Main InsightsPanel Component ─────────────────────────────────────────────
 
-export function InsightsPanel({ insights, participants, onClose, converstationId, rawMessages = [] }: InsightsPanelProps)
-{
+export function InsightsPanel({ 
+  insights, 
+  participants, 
+  onClose, 
+  converstationId, 
+  rawMessages = [] 
+}: InsightsPanelProps): JSX.Element {
   const [showChat, setShowChat] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('insights');
-  const [composerDraft] = useState('This is terrible and you always do this'); // example draft
+  const [composerDraft] = useState('This is terrible and you always do this');
 
-  const getHealthColor = (h: number) => h >= 70 ? 'text-positive' : h >= 40 ? 'text-amber-500' : 'text-negative';
-  const getSentimentColor = (s: ParticipantInsight['overallSentiment']) =>
+  const getHealthColor = (h: number): string => 
+    h >= 70 ? 'text-positive' : h >= 40 ? 'text-amber-500' : 'text-negative';
+  
+  const getSentimentColor = (s: ParticipantInsight['overallSentiment']): string =>
     s === 'positive' ? 'text-positive' : s === 'negative' ? 'text-negative' : 'text-muted-foreground';
-  const getSentimentBg = (s: ParticipantInsight['overallSentiment']) =>
+  
+  const getSentimentBg = (s: ParticipantInsight['overallSentiment']): string =>
     s === 'positive' ? 'bg-positive-bg' : s === 'negative' ? 'bg-negative-bg' : 'bg-muted';
 
   if (showChat) return <AIChatModal onClose={() => setShowChat(false)} />;
 
   return (
     <>
-      {/* Scoped styles */}
       <style>{`
-        /* Highlights */
         mark.highlight-positive {
           background: rgba(34,197,94,.18);
           color: #22c55e;
@@ -762,8 +835,6 @@ export function InsightsPanel({ insights, participants, onClose, converstationId
           border-radius: 3px;
           padding: 0 2px;
         }
-
-        /* Warn banner */
         .warn-banner {
           background: linear-gradient(135deg, rgba(245,158,11,.12), rgba(239,68,68,.08));
           border: 1px solid rgba(245,158,11,.3);
@@ -785,9 +856,7 @@ export function InsightsPanel({ insights, participants, onClose, converstationId
         }
         .warn-btn:hover { opacity: .8; }
         .warn-btn-rephrase { background: rgba(245,158,11,.25); color: #f59e0b; }
-        .warn-btn-dismiss  { background: rgba(255,255,255,.06); color: #9ca3af; }
-
-        /* Rephrase panel */
+        .warn-btn-dismiss { background: rgba(255,255,255,.06); color: #9ca3af; }
         .rephrase-panel { padding: 16px; }
         .back-btn {
           display: inline-flex; align-items: center; gap: 4px;
@@ -826,8 +895,6 @@ export function InsightsPanel({ insights, participants, onClose, converstationId
           flex-shrink: 0;
           margin-top: 2px;
         }
-
-        /* Thought cards */
         .thought-card {
           background: rgba(255,255,255,.03);
           border: 1px solid rgba(255,255,255,.07);
@@ -853,16 +920,12 @@ export function InsightsPanel({ insights, participants, onClose, converstationId
           font-weight: 600;
           color: #818cf8;
         }
-
-        /* Highlight msg card */
         .highlight-msg-card {
           background: rgba(255,255,255,.03);
           border: 1px solid rgba(255,255,255,.07);
           border-radius: 10px;
           padding: 10px 12px;
         }
-
-        /* Growth */
         .growth-header {
           display: flex; align-items: center; gap: 10px;
           padding-bottom: 12px;
@@ -880,8 +943,6 @@ export function InsightsPanel({ insights, participants, onClose, converstationId
           border-radius: 12px;
           padding: 14px;
         }
-
-        /* Shared avatars */
         .avatar-xs {
           width: 22px; height: 22px;
           border-radius: 50%;
@@ -903,8 +964,6 @@ export function InsightsPanel({ insights, participants, onClose, converstationId
         .legend-dot {
           width: 10px; height: 10px; border-radius: 3px; display: inline-block;
         }
-
-        /* Tab bar */
         .tab-bar {
           display: flex;
           border-bottom: 1px solid rgba(255,255,255,.08);
@@ -924,8 +983,6 @@ export function InsightsPanel({ insights, participants, onClose, converstationId
         }
         .tab-btn:hover { color: #e5e7eb; }
         .tab-btn.active { color: #818cf8; border-bottom-color: #818cf8; }
-
-        /* Chat with AI CTA */
         .chat-ai-cta {
           position: relative;
           width: 100%;
@@ -943,9 +1000,7 @@ export function InsightsPanel({ insights, participants, onClose, converstationId
           opacity: 1;
           transition: opacity .2s;
         }
-        .chat-ai-cta:hover .chat-ai-cta-glow {
-          opacity: 0.85;
-        }
+        .chat-ai-cta:hover .chat-ai-cta-glow { opacity: 0.85; }
         .chat-ai-cta::before {
           content: '';
           position: absolute;
@@ -998,17 +1053,15 @@ export function InsightsPanel({ insights, participants, onClose, converstationId
           transform: translateX(3px);
           color: #fff;
         }
-
-        /* Animations */
         @keyframes slideUp {
           from { opacity: 0; transform: translateY(6px); }
-          to   { opacity: 1; transform: translateY(0); }
+          to { opacity: 1; transform: translateY(0); }
         }
         .animate-slide-up { animation: slideUp .2s ease; }
         .panel-slide-in { animation: slideUp .18s ease; }
       `}</style>
 
-      <div className="h-full flex flex-col bg-card border-l border-border panel-slide-in">
+      <div className="h-full flex flex-col bg-card border-l border-border panel-slide-in" data-testid="insights-panel">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <div className="flex items-center gap-2">
@@ -1020,15 +1073,13 @@ export function InsightsPanel({ insights, participants, onClose, converstationId
               <p className="text-[10px] text-muted-foreground">AI-powered analysis</p>
             </div>
           </div>
-          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onClose}>
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onClose} data-testid="insights-close-btn">
             <X size={14} />
           </Button>
         </div>
 
-        {/* Pre-send Warning Zone (shown when a draft is detected) */}
-        <ComposerGuard draft={composerDraft}
-          converstationId={converstationId}
-          onClear={() => { }} />
+        {/* Composer Guard */}
+        <ComposerGuard draft={composerDraft} converstationId={converstationId} onClear={() => {}} />
 
         {/* Tab Bar */}
         <div className="tab-bar">
@@ -1037,6 +1088,7 @@ export function InsightsPanel({ insights, participants, onClose, converstationId
               key={t.id}
               className={cn('tab-btn', activeTab === t.id && 'active')}
               onClick={() => setActiveTab(t.id)}
+              data-testid={`tab-${t.id}`}
             >
               {t.icon}
               {t.label}
@@ -1046,8 +1098,6 @@ export function InsightsPanel({ insights, participants, onClose, converstationId
 
         {/* Tab Content */}
         <div className="flex-1 overflow-y-auto custom-scrollbar">
-
-          {/* ── INSIGHTS TAB ── */}
           {activeTab === 'insights' && (
             <div className="p-4 space-y-6">
               {/* Health Score */}
@@ -1076,8 +1126,7 @@ export function InsightsPanel({ insights, participants, onClose, converstationId
                   <MessageCircle size={14} className="text-muted-foreground" />
                   Participant Perspectives
                 </h4>
-                {insights.participants.map((insight) =>
-                {
+                {insights.participants.map((insight) => {
                   const participant = participants.find((p) => p.id === insight.userId);
                   if (!participant) return null;
                   return (
@@ -1143,7 +1192,7 @@ export function InsightsPanel({ insights, participants, onClose, converstationId
               </div>
 
               {/* Chat with AI CTA */}
-              <button className="chat-ai-cta" onClick={() => setShowChat(true)}>
+              <button className="chat-ai-cta" onClick={() => setShowChat(true)} data-testid="chat-with-ai-btn">
                 <div className="chat-ai-cta-glow" />
                 <div className="chat-ai-cta-inner">
                   <div className="chat-ai-cta-icon">
@@ -1163,21 +1212,18 @@ export function InsightsPanel({ insights, participants, onClose, converstationId
             </div>
           )}
 
-          {/* ── HIGHLIGHTS TAB ── */}
           {activeTab === 'highlights' && (
             rawMessages.length > 0
               ? <HighlightView messages={rawMessages} participants={participants} />
               : <div className="p-6 text-center text-xs text-muted-foreground">No messages to highlight yet.</div>
           )}
 
-          {/* ── THOUGHTS TAB ── */}
           {activeTab === 'thoughts' && (
             rawMessages.length > 0
               ? <ThoughtView messages={rawMessages} participants={participants} />
               : <div className="p-6 text-center text-xs text-muted-foreground">No thought data available yet.</div>
           )}
 
-          {/* ── REPORT TAB ── */}
           {activeTab === 'report' && (
             <GrowthReport insights={insights} participants={participants} />
           )}
@@ -1186,3 +1232,5 @@ export function InsightsPanel({ insights, participants, onClose, converstationId
     </>
   );
 }
+
+export default AIChatModal;
