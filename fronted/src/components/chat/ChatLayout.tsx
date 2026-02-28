@@ -203,6 +203,7 @@ export function ChatLayout() {
           onSelectConversation={selectConversation}
           currentUser={currentUser!}
           onNewChat={() => setNewChatOpen(true)}
+          onlineUsers={onlineUsers}
         />
       </div>
 
