@@ -7,7 +7,12 @@ import type {
   AuthPayload,
   MessageSendPayload,
   ModeSwitchPayload,
-
+  TypingStartPayload,
+  TypingStopPayload,
+  TypingIndicatorPayload,
+  PresenceOnlineUsersPayload,
+  PresenceUserOnlinePayload,
+  PresenceUserOfflinePayload,
 } from "../model/types";
 import chatMessageModel from "../model/chatMessage.model";
 import { channel } from "diagnostics_channel";
