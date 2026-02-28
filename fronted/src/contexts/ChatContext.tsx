@@ -388,7 +388,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       unsubModeSwitch();
       unsubAiToken();
     };
-  }, [userId, getConversationKey, conversations, activeConversationId, isUserOnline]);
+  }, [userId, getConversationKey, onlineUsers]);
 
   useEffect(() => {
     const client = clientRef.current;
