@@ -135,9 +135,14 @@ const chat_human_conversation_controller = async (req: Request, res: Response, n
 
 const chat_rephase_controller = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const { converstationId } = req.query;
+        const converstationId =
+            typeof req.query.converstationId === "string"
+                ? req.query.converstationId
+                : typeof req.query.conversationId === "string"
+                    ? req.query.conversationId
+                    : undefined;
 
-        if (typeof converstationId !== "string") {
+        if (!converstationId) {
             res.status(400).json({ message: "conversation id is not valid" });
             return;
         }
@@ -162,7 +167,7 @@ const chat_rephase_controller = async (req: Request, res: Response, next: NextFu
         }
 
         const lastMessage = await chatMessageModel
-            .findOne({ roomId: chatRoom._id })
+            .findOne({ roomId: chatRoom._id, channel: "human" })
             .sort({ createdAt: -1 });
 
         if (!lastMessage) {
@@ -170,7 +175,7 @@ const chat_rephase_controller = async (req: Request, res: Response, next: NextFu
             return;
         }
 
-        const isLastBlockedHuman = lastMessage.channel === "human" && lastMessage.status === "blocked";
+        const isLastBlockedHuman = lastMessage.status === "blocked";
 
         if (!isLastBlockedHuman) {
             await chatMessageModel.deleteMany({
@@ -183,7 +188,8 @@ const chat_rephase_controller = async (req: Request, res: Response, next: NextFu
         res.json({
             success: true,
             lastMessageIsBlocked: isLastBlockedHuman,
-            lastMessage: isLastBlockedHuman ? lastMessage.content : null
+            lastMessage: isLastBlockedHuman ? lastMessage.content : null,
+            chatMessageId: isLastBlockedHuman ? lastMessage._id : null,
         });
     } catch (err) {
         next(err);
@@ -192,9 +198,14 @@ const chat_rephase_controller = async (req: Request, res: Response, next: NextFu
 
 const chat_rephase_suggestion_controller = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const { conversationId } = req.query;
+        const conversationId =
+            typeof req.query.conversationId === "string"
+                ? req.query.conversationId
+                : typeof req.query.converstationId === "string"
+                    ? req.query.converstationId
+                    : undefined;
 
-        if (!conversationId || typeof conversationId !== "string") {
+        if (!conversationId) {
             res.status(400).json({ message: "valid conversation id is not provided" });
             return;
         }
@@ -219,11 +230,20 @@ const chat_rephase_suggestion_controller = async (req: Request, res: Response, n
         }
 
         const lastMessage = await chatMessageModel
-            .findOne({ roomId: chatRoom._id })
+            .findOne({ roomId: chatRoom._id, channel: "human" })
             .sort({ createdAt: -1 });
 
         if (!lastMessage) {
             res.status(404).json({ message: "no messages in conversation" });
+            return;
+        }
+
+        if (lastMessage.status !== "blocked") {
+            res.status(409).json({
+                message: "latest human message does not require rephrase",
+                chatMessageId: lastMessage._id,
+                content: lastMessage.content,
+            });
             return;
         }
 
@@ -268,11 +288,13 @@ const chat_rephase_suggestion_controller = async (req: Request, res: Response, n
 
         await chat_rephase.save();
 
-        res.json({
+        res.status(200).json({
             chatMessageId: lastMessage._id,
             chatRoomId: chatRoom._id,
             content: lastMessage.content,
-            positiveRewriteResult
+            aiRewriteSuggestion: positiveRewriteResult.suggestions,
+            reason: positiveRewriteResult.reason,
+            tone: positiveRewriteResult.tone,
         });
     } catch (err) {
         next(err);
