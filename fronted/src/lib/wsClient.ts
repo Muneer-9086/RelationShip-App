@@ -200,6 +200,10 @@ export class WsClient {
     this.send("ai:message", { receiver, content });
   }
 
+  stopAIStream(receiver: string): void {
+    this.send("ai:stop", { receiver });
+  }
+
   typingStart(partnerId: string): void {
     this.send("typing:start", { partnerId });
   }
