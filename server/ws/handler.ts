@@ -16,6 +16,14 @@ import type {
 } from "../model/types";
 import chatMessageModel from "../model/chatMessage.model";
 import { classifyMessageSentiment, streamAICoachResponseLegacy, AICoachContext, AICoachMemory, streamAICoachResponse } from "../llm";
+import { 
+  detectProblematicContent, 
+  quickContentCheck, 
+  contentDetectionStore,
+  type ContentDetectionResult,
+  type UserContentInsight,
+  type PatternAlert
+} from "../contentDetection";
 import mongoose from "mongoose";
 import ConversationMemory from "../model/aiMessage.model";
 
