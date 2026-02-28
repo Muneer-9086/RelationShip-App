@@ -447,6 +447,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const stopAIStream = useCallback(
+    (receiver: string) => {
+      clientRef.current.stopAIStream(receiver);
+    },
+    []
+  );
+
   const startTyping = useCallback((partnerId: string) => {
     clientRef.current.typingStart(partnerId);
   }, []);
