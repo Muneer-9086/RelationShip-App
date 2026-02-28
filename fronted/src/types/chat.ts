@@ -1,8 +1,10 @@
+export type UserPresenceStatus = 'online' | 'offline' | 'away';
+
 export interface User {
   id: string;
   name: string;
   avatar?: string;
-  status: 'online' | 'offline' | 'away';
+  status: UserPresenceStatus;
 }
 
 export interface AIAnalysis {
@@ -67,4 +69,53 @@ export interface ConversationInsights {
   overallHealth: number; // 0-100
   summary: string;
   recommendations: string[];
+}
+
+// WebSocket Event Payloads
+export interface TypingIndicatorPayload {
+  userId: string;
+  isTyping: boolean;
+  timestamp: number;
+}
+
+export interface PresenceOnlineUsersPayload {
+  users: string[];
+}
+
+export interface PresenceUserOnlinePayload {
+  userId: string;
+  timestamp: number;
+}
+
+export interface PresenceUserOfflinePayload {
+  userId: string;
+  timestamp: number;
+}
+
+export interface AuthResponsePayload {
+  success: boolean;
+  userId?: string;
+  message?: string;
+}
+
+export interface MessageReceivePayload {
+  message: {
+    messageId: string;
+    senderId: string;
+    receiverId: string;
+    content: string;
+    timestamp: number;
+    from: 'human' | 'ai';
+  };
+  conversationId: string;
+  status?: string;
+  channel?: string;
+}
+
+export interface ErrorPayload {
+  message: string;
+}
+
+export interface ConnectionStatePayload {
+  state: 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'offline';
 }
