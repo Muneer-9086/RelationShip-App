@@ -56,6 +56,18 @@ interface TypingState {
   };
 }
 
+interface ContentAlert {
+  id: string;
+  type: "flagged" | "blocked" | "pattern";
+  messageId?: string;
+  conversationId?: string;
+  detection?: ContentDetectionResult;
+  reason?: string;
+  suggestions: string[];
+  patternAlerts?: PatternAlert[];
+  timestamp: number;
+}
+
 interface ChatContextValue {
   client: WsClient;
   userId: string | null;
