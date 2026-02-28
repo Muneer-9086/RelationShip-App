@@ -284,6 +284,15 @@ export class WsClient {
     this.send("ai:stop", { receiver });
   }
 
+  // Content detection methods
+  requestContentInsights(conversationId?: string, limit?: number): void {
+    this.send("content:get_insights", { conversationId, limit });
+  }
+
+  requestPatternAlerts(): void {
+    this.send("content:get_alerts", {});
+  }
+
   typingStart(partnerId: string): void {
     this.send("typing:start", { partnerId });
   }
