@@ -5,7 +5,7 @@ import { AzureChatOpenAI, ChatOpenAI } from "@langchain/openai";
 
 dotenv.config();
 
-
+// ─── Schemas ─────────────────────────────────────────────────────────────────
 
 export const PositiveRewriteSchema = z.object({
     suggestions: z.array(z.string()).length(3),
@@ -13,9 +13,7 @@ export const PositiveRewriteSchema = z.object({
     reason: z.string()
 });
 
-export type PositiveRewriteResult = z.infer<
-    typeof PositiveRewriteSchema
->;
+export type PositiveRewriteResult = z.infer<typeof PositiveRewriteSchema>;
 
 export const SentimentClassifierSchema = z.object({
     sentiment: z.enum(["positive", "neutral", "negative"]),
@@ -24,11 +22,31 @@ export const SentimentClassifierSchema = z.object({
     isHurtful: z.boolean()
 });
 
-export type SentimentClassifierResult = z.infer<
-    typeof SentimentClassifierSchema
->;
+export type SentimentClassifierResult = z.infer<typeof SentimentClassifierSchema>;
 
+// ─── Model Configuration ─────────────────────────────────────────────────────
 
+const model1 = new ChatOpenAI({
+    model: "gpt-4.1-mini",
+    temperature: 0.3,
+    timeout: 20000,
+    apiKey: process.env.AZURE_OPENAI_KEY!,
+    configuration: {
+        baseURL: "https://JennyVoiceCloudV.openai.azure.com/openai/v1/"
+    }
+});
+
+const model2 = new ChatOpenAI({
+    model: "gpt-4.1-nano",
+    temperature: 0,
+    maxTokens: 120,
+    apiKey: process.env.AZURE_OPENAI_KEY!,
+    configuration: {
+        baseURL: "https://JennyVoiceCloudV.openai.azure.com/openai/v1/"
+    }
+});
+
+// ─── Positive Rewrite ─────────────────────────────────────────────────────────
 
 const positiveRewritePrompt = ChatPromptTemplate.fromMessages([
     [
@@ -58,40 +76,12 @@ User message:
     ]
 ]);
 
-
-const model1 = new ChatOpenAI({
-    model: "gpt-4.1-mini",
-    temperature: 0.3,
-    timeout: 20000, // ⭐ MUST ADD
-    apiKey: process.env.AZURE_OPENAI_KEY!,
-    configuration: {
-        baseURL: "https://JennyVoiceCloudV.openai.azure.com/openai/v1/"
-    }
-});
-
-const model2 = new ChatOpenAI({
-    model: "gpt-4.1-nano",
-    temperature: 0,
-    maxTokens: 120,
-    apiKey: process.env.AZURE_OPENAI_KEY!,
-    configuration: {
-        baseURL: "https://JennyVoiceCloudV.openai.azure.com/openai/v1/"
-    }
-});
-
-
-
-
 export async function generatePositiveRewrite(params: {
     message: string;
     history?: string;
-}): Promise<PositiveRewriteResult>
-{
+}): Promise<PositiveRewriteResult> {
     try {
-        const structuredModel = model1.withStructuredOutput(
-            PositiveRewriteSchema
-        );
-
+        const structuredModel = model1.withStructuredOutput(PositiveRewriteSchema);
         const chain = positiveRewritePrompt.pipe(structuredModel);
         const { message, history } = params;
 
@@ -101,14 +91,14 @@ export async function generatePositiveRewrite(params: {
         });
 
         return result;
-    }
-    catch (err) {
+    } catch (err) {
         console.log("ERROR:generatePositiveRewrite");
         console.log(err);
         throw err;
     }
 }
 
+// ─── Sentiment Classifier ─────────────────────────────────────────────────────
 
 export const sentimentClassifierPrompt = ChatPromptTemplate.fromMessages([
     [
@@ -149,19 +139,14 @@ User message:
     ]
 ]);
 
-
 export async function classifyMessageSentiment(params: {
     message: string;
     persona?: string;
     relationship?: string;
     style?: string;
-}): Promise<SentimentClassifierResult>
-{
+}): Promise<SentimentClassifierResult> {
     try {
-        const structuredModel = model2.withStructuredOutput(
-            SentimentClassifierSchema
-        );
-
+        const structuredModel = model2.withStructuredOutput(SentimentClassifierSchema);
         const chain = sentimentClassifierPrompt.pipe(structuredModel);
 
         const { message, persona, relationship, style } = params;
@@ -181,10 +166,12 @@ export async function classifyMessageSentiment(params: {
     }
 }
 
+// ─── Relationship Analysis ────────────────────────────────────────────────────
+
 export const relationshipAnalyzerPrompt = ChatPromptTemplate.fromMessages([
-  [
-    "system",
-    `You are an emotionally intelligent relationship coach analyzing a chat between two people.
+    [
+        "system",
+        `You are an emotionally intelligent relationship coach analyzing a chat between two people.
 
 Your job is to clearly explain what is happening and give balanced, practical coaching to BOTH participants.
 
@@ -238,10 +225,10 @@ STYLE GUIDELINES:
 - Max 4 thought steps per user  
 
 Return ONLY valid JSON matching the required schema.`
-  ],
-  [
-    "human",
-    `
+    ],
+    [
+        "human",
+        `
 Participants:
 User1: {user1Name}
 User2: {user2Name}
@@ -260,93 +247,82 @@ Users persona:
 
 Relationship context:
 {relationship}`
-  ]
+    ]
 ]);
 
 export const RelationshipAnalysisSchema = z.object({
-  highlights: z.object({
-    positive: z.array(z.string()).max(6),
-    negative: z.array(z.string()).max(6)
-  }),
+    highlights: z.object({
+        positive: z.array(z.string()).max(6),
+        negative: z.array(z.string()).max(6)
+    }),
 
-  participantPerspectives: z
-    .array(
-      z.object({
-        participant: z.string().min(1),
-        observations: z.array(z.string().min(1)).max(4)
-      })
-    )
-    .length(2),
+    participantPerspectives: z
+        .array(
+            z.object({
+                participant: z.string().min(1),
+                observations: z.array(z.string().min(1)).max(4)
+            })
+        )
+        .length(2),
 
-  perspectiveThoughtProcess: z
-    .array(
-      z.object({
-        participant: z.string().min(1),
-        steps: z.array(z.string().min(1)).max(4)
-      })
-    )
-    .length(2),
+    perspectiveThoughtProcess: z
+        .array(
+            z.object({
+                participant: z.string().min(1),
+                steps: z.array(z.string().min(1)).max(4)
+            })
+        )
+        .length(2),
 
-  userInsights: z
-    .array(
-      z.object({
-        participant: z.string().min(1),
-
-        // ⭐ NEW — must match prompt
-        persona: z.string().min(1),
-        tone: z.string().min(1),
-
-        interactionDynamics: z.string().min(1),
-        summary: z.string().min(1),
-
-        recommendations: z.array(z.string().min(1)).max(4),
-        longTermSignals: z.array(z.string().min(1)).max(4),
-
-        conversationHealth: z.object({
-          score: z.number().min(0).max(100),
-          label: z.enum(["good", "neutral", "warning", "toxic"]),
-          reason: z.string().min(1)
-        })
-      })
-    )
-    .length(2)
+    userInsights: z
+        .array(
+            z.object({
+                participant: z.string().min(1),
+                persona: z.string().min(1),
+                tone: z.string().min(1),
+                interactionDynamics: z.string().min(1),
+                summary: z.string().min(1),
+                recommendations: z.array(z.string().min(1)).max(4),
+                longTermSignals: z.array(z.string().min(1)).max(4),
+                conversationHealth: z.object({
+                    score: z.number().min(0).max(100),
+                    label: z.enum(["good", "neutral", "warning", "toxic"]),
+                    reason: z.string().min(1)
+                })
+            })
+        )
+        .length(2)
 });
 
-export type RelationshipAnalysisResult =
-  z.infer<typeof RelationshipAnalysisSchema>;
-
-
+export type RelationshipAnalysisResult = z.infer<typeof RelationshipAnalysisSchema>;
 
 export async function analyzeConversation(params: {
     message: string;
     user: {
-        part1: string,
-        part2: string,
-        status: string,
-        status_user:string
-    }
-    history: string; 
+        part1: string;
+        part2: string;
+        status: string;
+        status_user: string;
+    };
+    history: string;
     persona?: string;
     relationship?: string;
-}): Promise<RelationshipAnalysisResult>
-{
+}): Promise<RelationshipAnalysisResult> {
     try {
-        const structuredModel = model1.withStructuredOutput(
-            RelationshipAnalysisSchema
-        );
+        const structuredModel = model1.withStructuredOutput(RelationshipAnalysisSchema);
         const chain = relationshipAnalyzerPrompt.pipe(structuredModel);
 
-        const { message, history, persona, relationship,user } = params;
+        const { message, history, persona, relationship, user } = params;
 
         const result = await chain.invoke({
             message,
             history,
-            persona: persona && persona?.length>0?persona:"Not specified",
+            persona: persona && persona?.length > 0 ? persona : "Not specified",
             relationship: relationship || "Not specified",
             user1Name: user['part1'],
             user2Name: user['part2'],
             status: user['status'],
-            user:user['status_user']
+            user: user['status_user']
         });
 
         return result;
@@ -357,104 +333,295 @@ export async function analyzeConversation(params: {
     }
 }
 
+// ─── AI Coach Types ───────────────────────────────────────────────────────────
+
+export interface AICoachMessage {
+    role: 'user' | 'ai';
+    content: string;
+    timestamp?: number;
+}
+
+export interface AICoachMemory {
+    shortTermMessages: AICoachMessage[];  // Last 10 messages
+    longTermMemory: string[];             // Persistent insights
+    persona: string;
+    relationship: string;
+    userEmotional: string;
+    aiSummary: string;
+}
+
+export interface AICoachContext {
+    // User context
+    currentUserName: string;
+    otherUserName: string;
+    currentUserId: string;
+    otherUserId: string;
+
+    // Analysis summaries
+    userSummary1: string;
+    userSummary2: string;
+    user1Tone: string;
+    user2Tone: string;
+
+    // Human conversation context
+    humanChatContext: string;
+
+    // Memory
+    memory: AICoachMemory;
+
+    // Conversation identifiers
+    chatRoomId: string;
+    conversationId: string;
+    aiSenderId: string;
+    visibleTo: string[];
+}
+
+export interface StreamCallbacks {
+    onToken: (chunk: string) => void;
+    onComplete: (finalMessage: string) => void;
+    onError?: (error: Error) => void;
+    signal?: AbortSignal;
+}
+
+// ─── Enhanced AI Coach Prompt ─────────────────────────────────────────────────
+
 export const aiCoachPrompt = ChatPromptTemplate.fromMessages([
-  [
-    "system",
-    `You are an emotionally intelligent AI assistant embedded in a real-time chat app. You help {currentUserName} navigate their conversation with {otherUserName}.
+    [
+        "system",
+        `You are an emotionally intelligent AI assistant embedded in a real-time chat application.
+You are helping {currentUserName} navigate their conversation with {otherUserName}.
 
-## Core Behavior
-- Respond to the latest message naturally — like a supportive friend, not a therapist.
-- Keep replies to 1–2 short, casual sentences unless more depth is clearly needed.
-- Only offer advice or coaching if the user seems confused, distressed, or explicitly asks for it.
-- If it's casual chat, just continue the conversation naturally.
+## Your Role
+You are a supportive, perceptive friend — not a therapist or clinical advisor.
+Your goal is to help {currentUserName} communicate better and understand the conversation dynamics.
 
-## Relationship Awareness
-- If the relationship between {currentUserName} and {otherUserName} is unknown or unclear, ask once before proceeding:
-  "Just so I can help better — what's your relationship with {otherUserName}?"
-- Never ask for the relationship more than once per session.
-- Use relationship context subtly to shape tone — never reference it explicitly.
+## Persona Awareness
+{persona}
 
-## Hard Rules
-- Never summarize the conversation.
-- Never repeat or paraphrase messages back.
-- Never mention memory, analysis, context, or that you're an AI coach.
-- Never make assumptions — if something is ambiguous, ask one gentle clarifying question.
-- Never give unsolicited relationship advice.
+## Relationship Context
+{relationship}
 
-## Tone & Style
-- Casual, warm, and concise.
-- Match the emotional energy of the conversation — light when they're light, gentle when they're stressed.
-- Sound like a perceptive friend, not a chatbot.`
-  ],
-  [
-    "human",
-    `## People
-- You are helping: {currentUserName}
-- They are talking to: {otherUserName}
-- Relationship: {relationship}
+## Emotional State
+Current emotional state of {currentUserName}: {userEmotional}
 
-## Conversation History
-{userChat}
+## Communication Guidelines
 
-## Latest Message (respond to this)
-{message}
+### DO:
+- Respond naturally and conversationally (1-3 sentences unless depth is needed)
+- Match the emotional energy — light when casual, gentle when stressed
+- Use the persona and relationship context to shape your tone subtly
+- Ask ONE clarifying question if something is ambiguous
+- Acknowledge feelings before offering perspective
+- Reference specific details from the conversation when relevant
 
-## Background Context (use subtly — do not reference directly)
-- {currentUserName} summary: {userSummary1}
-- {otherUserName} summary: {userSummary2}
-- {currentUserName} tone: {user1Tone}
-- {otherUserName} tone: {user2Tone}
-- Emotional state: {userEmotional}
-- Long-term memory: {longMemory}`
-  ]
+### DON'T:
+- Summarize or paraphrase messages back
+- Give unsolicited relationship advice
+- Mention that you're an AI, have memory, or are analyzing anything
+- Make assumptions about feelings or intentions
+- Repeat the same idea multiple ways
+- Use clinical or robotic language
+- Reference "long-term memory" or "context" explicitly
+
+## Memory Context (use subtly, never reference directly)
+### Recent Insights:
+{longMemory}
+
+### What you know about {currentUserName}:
+{userSummary1}
+
+### What you know about {otherUserName}:
+{userSummary2}
+
+### {currentUserName}'s communication tone: {user1Tone}
+### {otherUserName}'s communication tone: {user2Tone}
+
+## Conversation Summary (if available):
+{aiSummary}`
+    ],
+    [
+        "human",
+        `## Human Conversation Context (the conversation {currentUserName} is having with {otherUserName}):
+{humanChatContext}
+
+## Our Conversation History:
+{chatHistory}
+
+## Latest Message from {currentUserName}:
+{latestMessage}
+
+Respond naturally to help {currentUserName}.`
+    ]
 ]);
 
-export async function streamAICoachResponse(params: {
-  userSummary1?: string;
-  userSummary2?: string;
-  user1Tone?: string;
-  user2Tone?: string;
-  currentUserName: string;
-  otherUserName: string;
-  userChat: string;
-  persona?: string;
-  longMemory?: string[];
-  userEmotional?: string;
-  relationship?: string;
-  message: Array<{ ai?: string; user?: string }>;
+// ─── Build Chat History String ────────────────────────────────────────────────
 
-  onToken: (chunk: string) => void;
-  onComplete: (finalMessage: string) => void;
-}) {
-  const chain = aiCoachPrompt.pipe(model1);
-
-  let fullMessage = "";
-
-  const stream = await chain.stream({
-    userSummary1: params.userSummary1 || "Not specified",
-    userSummary2: params.userSummary2 || "Not specified",
-    user1Tone: params.user1Tone || "Not specified",
-    user2Tone: params.user2Tone || "Not specified",
-    currentUserName: params.currentUserName,
-    otherUserName: params.otherUserName,
-    userChat: params.userChat,
-    persona: params.persona || "Not specified",
-    longMemory: params.longMemory?.join("\n") || "None",
-    userEmotional: params.userEmotional || "Unknown",
-    relationship: params.relationship || "Unknown",
-    message: JSON.stringify(params.message)
-  });
-
-  for await (const chunk of stream) {
-    if (typeof chunk?.content === "string") {
-      fullMessage += chunk.content;
-      params.onToken(chunk.content); 
+function buildChatHistoryString(messages: AICoachMessage[], limit: number = 10): string {
+    if (!messages || messages.length === 0) {
+        return "No previous messages in our conversation.";
     }
-    }
+
+    const recentMessages = messages.slice(-limit);
     
-    console.log("___fullMessage-__");
-    console.log(fullMessage)
-  params.message.push({ ai: fullMessage });
-
-  params.onComplete(fullMessage);
+    return recentMessages
+        .map(msg => {
+            const role = msg.role === 'user' ? 'User' : 'AI';
+            return `${role}: ${msg.content}`;
+        })
+        .join('\n');
 }
+
+// ─── Stream AI Coach Response ─────────────────────────────────────────────────
+
+export async function streamAICoachResponse(params: {
+    context: AICoachContext;
+    latestMessage: string;
+    callbacks: StreamCallbacks;
+}): Promise<void> {
+    const { context, latestMessage, callbacks } = params;
+    const { onToken, onComplete, onError, signal } = callbacks;
+    const { memory } = context;
+
+    try {
+        const chain = aiCoachPrompt.pipe(model1);
+
+        let fullMessage = "";
+
+        const promptValues = {
+            // User identifiers
+            currentUserName: context.currentUserName,
+            otherUserName: context.otherUserName,
+
+            // Persona and relationship
+            persona: memory.persona || "No specific persona identified yet.",
+            relationship: memory.relationship || "Relationship not yet established.",
+            userEmotional: memory.userEmotional || "Unknown emotional state.",
+
+            // Summaries and tones
+            userSummary1: context.userSummary1 || "No summary available.",
+            userSummary2: context.userSummary2 || "No summary available.",
+            user1Tone: context.user1Tone || "Unknown tone.",
+            user2Tone: context.user2Tone || "Unknown tone.",
+
+            // Memory
+            longMemory: memory.longTermMemory.length > 0 
+                ? memory.longTermMemory.join('\n- ') 
+                : "No long-term insights recorded yet.",
+            aiSummary: memory.aiSummary || "No conversation summary yet.",
+
+            // Conversation context
+            humanChatContext: context.humanChatContext || "No human conversation context available.",
+            chatHistory: buildChatHistoryString(memory.shortTermMessages, 10),
+            
+            // Latest message
+            latestMessage
+        };
+
+        const stream = await chain.stream(promptValues);
+
+        for await (const chunk of stream) {
+            // Check for abort signal
+            if (signal?.aborted) {
+                throw new DOMException("Aborted", "AbortError");
+            }
+
+            if (typeof chunk?.content === "string") {
+                fullMessage += chunk.content;
+                onToken(chunk.content);
+            }
+        }
+
+        console.log("AI Coach response completed:", fullMessage.substring(0, 100) + "...");
+
+        onComplete(fullMessage);
+
+    } catch (err: any) {
+        if (err?.name === "AbortError") {
+            console.log("AI stream aborted by user");
+            throw err;
+        }
+        
+        console.error("ERROR:streamAICoachResponse", err);
+        
+        if (onError) {
+            onError(err instanceof Error ? err : new Error(String(err)));
+        }
+        throw err;
+    }
+}
+
+// ─── Legacy Support: Original streamAICoachResponse signature ─────────────────
+
+export async function streamAICoachResponseLegacy(params: {
+    userSummary1?: string;
+    userSummary2?: string;
+    user1Tone?: string;
+    user2Tone?: string;
+    currentUserName: string;
+    otherUserName: string;
+    userChat: string;
+    persona?: string;
+    longMemory?: string[];
+    userEmotional?: string;
+    relationship?: string;
+    message: Array<{ ai?: string; user?: string }>;
+
+    onToken: (chunk: string) => void;
+    onComplete: (finalMessage: string) => void;
+    signal?: AbortSignal;
+}): Promise<void> {
+    // Convert legacy message format to new format
+    const shortTermMessages: AICoachMessage[] = params.message
+        .filter(m => m.ai || m.user)
+        .map(m => ({
+            role: m.ai ? 'ai' as const : 'user' as const,
+            content: m.ai || m.user || '',
+            timestamp: Date.now()
+        }));
+
+    // Get latest user message
+    const latestUserMessage = params.message
+        .filter(m => m.user)
+        .pop();
+
+    const context: AICoachContext = {
+        currentUserName: params.currentUserName,
+        otherUserName: params.otherUserName,
+        currentUserId: '',
+        otherUserId: '',
+        userSummary1: params.userSummary1 || '',
+        userSummary2: params.userSummary2 || '',
+        user1Tone: params.user1Tone || '',
+        user2Tone: params.user2Tone || '',
+        humanChatContext: params.userChat,
+        memory: {
+            shortTermMessages,
+            longTermMemory: params.longMemory || [],
+            persona: params.persona || '',
+            relationship: params.relationship || '',
+            userEmotional: params.userEmotional || '',
+            aiSummary: ''
+        },
+        chatRoomId: '',
+        conversationId: '',
+        aiSenderId: '',
+        visibleTo: []
+    };
+
+    await streamAICoachResponse({
+        context,
+        latestMessage: latestUserMessage?.user || '',
+        callbacks: {
+            onToken: params.onToken,
+            onComplete: (finalMessage) => {
+                // Push to legacy message array
+                params.message.push({ ai: finalMessage });
+                params.onComplete(finalMessage);
+            },
+            signal: params.signal
+        }
+    });
+}
+
+// Re-export legacy function name for backwards compatibility
+export { streamAICoachResponseLegacy as streamAICoachResponseOld };
