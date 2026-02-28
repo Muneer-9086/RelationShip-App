@@ -220,6 +220,14 @@ export function handleConnection(ws: WebSocket): void {
         handleGetOnline(socket);
         break;
 
+      case "content:get_insights":
+        handleGetContentInsights(socket, payload.data as ContentInsightRequestPayload);
+        break;
+
+      case "content:get_alerts":
+        handleGetPatternAlerts(socket);
+        break;
+
       case "disconnect":
         handleDisconnect(socket);
         break;
