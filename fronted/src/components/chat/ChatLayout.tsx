@@ -37,9 +37,9 @@ export function ChatLayout() {
 
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [currentUser, setCurrentUser] = useState(userId
+  const [currentUser, setCurrentUser] = useState<User | null>(userId
     ? { id: userId, name: "You", status: "online" as const }
-    : null)
+    : null);
 
   const activeConversation = conversations.find(
     (c) => c.id === activeConversationId
