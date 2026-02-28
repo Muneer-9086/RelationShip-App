@@ -74,6 +74,7 @@ interface ChatContextValue {
   setShowInsights: React.Dispatch<React.SetStateAction<boolean>>;
   showInsights: boolean;
   sendMessageAI: (receiverId: string, content: string) => void;
+  stopAIStream: (receiverId: string) => void;
   isUserOnline: (userId: string) => boolean;
   getTypingUsers: (conversationId: string) => string[];
 }
