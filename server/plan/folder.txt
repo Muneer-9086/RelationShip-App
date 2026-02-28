@@ -1,0 +1,19 @@
+ai/
+ ├─ onnx/
+ │   ├─ toxicity.ts
+ │   ├─ emotion.ts
+ │   ├─ intent.ts
+ │   └─ sentimentSpan.ts
+ │
+ ├─ llm/
+ │   ├─ rewrite.ts
+ │   ├─ mediator.ts
+ │   └─ coaching.ts
+ │
+ ├─ memory/
+ │   ├─ shortMemory.ts
+ │   ├─ behaviorMemory.ts
+ │   └─ relationshipMemory.ts
+ │
+ ├─ realtime/
+ │   └─ typingAnalyzer.ts

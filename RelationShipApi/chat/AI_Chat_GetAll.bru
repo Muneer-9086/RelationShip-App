@@ -1,0 +1,22 @@
+meta {
+  name: AI_Chat_GetAll
+  type: http
+  seq: 2
+}
+
+post {
+  url: http://localhost:3000/api/chat/converstation/ai/chat/getAll
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "chatRoomId":"699aebccd5a071eea785878c",
+    "converstationId":"69935091b97e1ac7c6b89cd7"
+  }
+}
+
+settings {
+  encodeUrl: true
+}

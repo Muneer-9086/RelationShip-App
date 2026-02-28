@@ -1,0 +1,19 @@
+meta {
+  name: RelationShip Analysis
+  type: http
+  seq: 1
+}
+
+get {
+  url: http://localhost:3000/api/chat/converstation/relationship/analysis?converstationId=69935091b97e1ac7c6b89cd7:699aeaed8198b1e502e97e62
+  body: none
+  auth: inherit
+}
+
+params:query {
+  converstationId: 69935091b97e1ac7c6b89cd7:699aeaed8198b1e502e97e62
+}
+
+settings {
+  encodeUrl: true
+}

@@ -1,0 +1,145 @@
+===================== 1. REALTIME TYPING =====================
+
+[User typing]
+      |
+      | debounce 150ms
+      v
+POST /analyze
+      |
+      v
+[Normalize text]
+      |
+      v
+[ONNX Toxicity Model]
+      |
+      | toxic < 0.40 ?
+      |-----------YES---------------------------NO---------------------------|
+      |                                                                       |
+      | [ONNX Sentiment]                                                      |
+      |                                                                       |
+      v                                                                       v
+[Safe / Negative tone]                                            [ONNX Emotion + Intent]
+      |                                                                       |
+      |--------------------------- merge -------------------------------------|
+                              |
+                              v
+                 [Word Level Good/Bad Detection]
+                              |
+                              v
+                     [Coaching Decision Engine]
+                              |
+                              v
+Return UI signals:
+  - warning
+  - tone hint
+  - empathy suggestion
+  - highlight words
+
+(Realtime feedback complete — NO LLM used)
+
+
+===================== 2. USER PRESSES SEND =====================
+
+[User clicks Send]
+      |
+      v
+POST /rewrite
+      |
+      v
+[Build LLM Context]
+  - original text
+  - detected emotion
+  - detected intent
+  - tone level
+      |
+      v
+[LLM Rewrite Assistant]
+      |
+      v
+Show suggestion:
+  Send original / Send improved
+
+
+===================== 3. CONVERSATION MONITOR =====================
+
+[Every message saved]
+      |
+      v
+Check conversation state
+      |
+      | repeated anger OR escalating toxicity ?
+      |-------------YES--------------------NO------------------|
+      |                                                       |
+      v                                                       v
+POST /mediate                                       Continue chat
+      |
+      v
+[LLM Mediator explains misunderstanding]
+      |
+      v
+Show neutral explanation to users
+
+
+===================== 4. AFTER CHAT ENDS =====================
+
+[No messages for 30s]
+      |
+      v
+POST /reflect
+      |
+      v
+[LLM Reflection Analysis]
+      |
+      v
+Extract:
+  - emotional triggers
+  - communication style
+  - recurring patterns
+      |
+      v
+Store relationship memory
+
+
+===================== 5. NEXT CONVERSATION =====================
+
+[New message typed]
+      |
+      v
+Load stored memory
+      |
+      v
+Inject memory into coaching decisions
+      |
+      v
+More personalized warnings & suggestions
+
+
+===================== OPTIONAL USER ACTIONS =====================
+
+User clicks "Help me reply"
+      |
+      v
+POST /coach
+      |
+      v
+LLM generates suggested response
+
+User asks "Why warning?"
+      |
+      v
+Explain using ONNX + memory context
+
+
+🧠 How responsibilities are split:-
+
+ONNX models  → fast reactions (milliseconds)
+LLM          → understanding & rewriting (seconds)
+Memory       → learning behavior (over time)
+
+
+Mental model
+
+Typing  → Reflex (ONNX)
+Send    → Thinking (LLM)
+History → Learning (Memory)
+

@@ -1,0 +1,345 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* MindfulChat - Emotional Intelligence Messaging Platform
+   Design System: Calming, therapeutic, mental-health friendly */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Nunito:wght@400;500;600;700&display=swap');
+
+@import url("https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap");
+
+@import url("https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;600;700&display=swap");
+
+@import url("https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;700&display=swap");
+
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap");
+
+@import url("https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&display=swap");
+
+@import url("https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap");
+
+@layer base {
+  :root {
+    /* Calming, therapeutic palette */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 0%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 0%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 0%;
+
+    /* Sage green - growth, calm, positivity */
+    --primary: 0 0% 0%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Soft lavender - secondary actions */
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 0%;
+
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
+
+    /* Soft teal accent */
+    --accent: 0 0% 90%;
+    --accent-foreground: 0 0% 0%;
+
+    /* Soft coral for warnings - non-aggressive */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 0%;
+    --input: 0 0% 0%;
+    --ring: 0 0% 0%;
+
+    --radius: 0rem;
+
+    /* Custom semantic colors */
+    --positive: 152 50% 45%;
+    --positive-bg: 152 50% 95%;
+    --positive-foreground: 152 50% 25%;
+
+    --negative: 12 60% 60%;
+    --negative-bg: 12 60% 95%;
+    --negative-foreground: 12 60% 30%;
+
+    --neutral: 220 15% 55%;
+    --neutral-bg: 220 15% 96%;
+
+    --ai-accent: 250 60% 65%;
+    --ai-bg: 250 60% 97%;
+    --ai-foreground: 250 60% 30%;
+
+    /* Chat specific */
+    --chat-bubble-sent: 152 35% 92%;
+    --chat-bubble-received: 0 0% 100%;
+    --chat-bubble-ai: 250 50% 96%;
+
+    /* Sidebar */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 0 0% 0%;
+    --sidebar-primary: 0 0% 0%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 90%;
+    --sidebar-accent-foreground: 0 0% 0%;
+    --sidebar-border: 0 0% 0%;
+    --sidebar-ring: 0 0% 0%;
+
+    /* Gradients */
+    --gradient-calm: linear-gradient(135deg, hsl(152, 35%, 45%) 0%, hsl(175, 40%, 50%) 100%);
+    --gradient-warm: linear-gradient(135deg, hsl(40, 80%, 95%) 0%, hsl(30, 70%, 92%) 100%);
+    --gradient-insight: linear-gradient(135deg, hsl(250, 60%, 97%) 0%, hsl(280, 50%, 96%) 100%);
+
+    /* Shadows */
+    --shadow-soft: 0 2px 12px -2px hsl(220 15% 20% / 0.08);
+    --shadow-medium: 0 4px 20px -4px hsl(220 15% 20% / 0.12);
+    --shadow-glow: 0 0 20px hsl(152 35% 45% / 0.15);
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+    --sidebar: 0 0% 98%;
+    --font-sans: 'Space Grotesk', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+    --font-serif: ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
+    --font-mono: 'Space Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    --shadow-2xs: 1px 1px 0px 0px #000000;
+    --shadow-xs: 2px 2px 0px 0px #000000;
+    --shadow-sm: 3px 3px 0px 0px #000000;
+    --shadow: 5px 5px 0px 0px #000000;
+    --shadow-md: 8px 8px 0px 0px #000000;
+    --shadow-lg: 12px 12px 0px 0px #000000;
+    --shadow-xl: 16px 16px 0px 0px #000000;
+    --shadow-2xl: 24px 24px 0px 0px #000000;
+    --tracking-normal: 0em;
+    --spacing: 0.25rem;
+  }
+
+  .dark {
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+
+    --card: 0 0% 0%;
+    --card-foreground: 0 0% 100%;
+
+    --popover: 0 0% 0%;
+    --popover-foreground: 0 0% 100%;
+
+    --primary: 0 0% 100%;
+    --primary-foreground: 0 0% 0%;
+
+    --secondary: 0 0% 15%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 65%;
+
+    --accent: 0 0% 15%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 100%;
+    --input: 0 0% 100%;
+    --ring: 0 0% 100%;
+
+    --positive: 152 45% 55%;
+    --positive-bg: 152 40% 15%;
+    --positive-foreground: 152 45% 80%;
+
+    --negative: 12 55% 55%;
+    --negative-bg: 12 50% 15%;
+    --negative-foreground: 12 55% 80%;
+
+    --ai-accent: 250 55% 65%;
+    --ai-bg: 250 50% 15%;
+    --ai-foreground: 250 55% 85%;
+
+    --chat-bubble-sent: 152 30% 20%;
+    --chat-bubble-received: 220 20% 16%;
+    --chat-bubble-ai: 250 40% 18%;
+
+    --sidebar-background: 220 20% 12%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 0 0% 100%;
+    --sidebar-primary-foreground: 0 0% 0%;
+    --sidebar-accent: 0 0% 15%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 0 0% 100%;
+    --sidebar-ring: 0 0% 100%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+    --sidebar: 0 0% 5%;
+    --shadow-2xs: 1px 1px 0px 0px #ffffff;
+    --shadow-xs: 2px 2px 0px 0px #ffffff;
+    --shadow-sm: 3px 3px 0px 0px #ffffff;
+    --shadow: 5px 5px 0px 0px #ffffff;
+    --shadow-md: 8px 8px 0px 0px #ffffff;
+    --shadow-lg: 12px 12px 0px 0px #ffffff;
+    --shadow-xl: 16px 16px 0px 0px #ffffff;
+    --shadow-2xl: 24px 24px 0px 0px #ffffff;
+    --radius: 0rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Nunito', 'Inter', system-ui, sans-serif;
+    @apply font-semibold tracking-tight;
+  }
+}
+
+@layer components {
+  /* Highlight styles for message text */
+  .highlight-positive {
+    @apply bg-positive-bg text-positive-foreground rounded px-1 py-0.5;
+    background-color: hsl(var(--positive-bg));
+    color: hsl(var(--positive-foreground));
+  }
+
+  .highlight-negative {
+    @apply bg-negative-bg text-negative-foreground rounded px-1 py-0.5;
+    background-color: hsl(var(--negative-bg));
+    color: hsl(var(--negative-foreground));
+  }
+
+  /* Chat bubble animations */
+  .chat-bubble-enter {
+    animation: bubbleEnter 0.3s ease-out forwards;
+  }
+
+  @keyframes bubbleEnter {
+    from {
+      opacity: 0;
+      transform: translateY(10px) scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  /* AI panel slide animation */
+  .panel-slide-in {
+    animation: panelSlide 0.3s ease-out forwards;
+  }
+
+  @keyframes panelSlide {
+    from {
+      opacity: 0;
+      transform: translateX(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  /* Gentle pulse for AI indicator */
+  .ai-pulse {
+    animation: aiPulse 2s ease-in-out infinite;
+  }
+
+  @keyframes aiPulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.6;
+    }
+  }
+
+  /* Typing indicator */
+  .typing-dot {
+    animation: typingDot 1.4s ease-in-out infinite;
+  }
+
+  .typing-dot:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+
+  .typing-dot:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+
+  @keyframes typingDot {
+    0%, 60%, 100% {
+      transform: translateY(0);
+    }
+    30% {
+      transform: translateY(-4px);
+    }
+  }
+
+  /* Smooth hover transitions */
+  .hover-lift {
+    @apply transition-all duration-200;
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-medium);
+  }
+
+  /* Scrollbar styling */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.2);
+    border-radius: 3px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.3);
+  }
+}
+
+@layer utilities {
+  .gradient-calm {
+    background: var(--gradient-calm);
+  }
+
+  .gradient-warm {
+    background: var(--gradient-warm);
+  }
+
+  .gradient-insight {
+    background: var(--gradient-insight);
+  }
+
+  .shadow-soft {
+    box-shadow: var(--shadow-soft);
+  }
+
+  .shadow-medium {
+    box-shadow: var(--shadow-medium);
+  }
+
+  .shadow-glow {
+    box-shadow: var(--shadow-glow);
+  }
+}
