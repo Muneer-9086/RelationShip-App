@@ -109,36 +109,53 @@ function RephrasePanel({
   onBack
 }: RephrasePanelProps): JSX.Element {
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [apiData, setApiData] = useState<{
     aiRewriteSuggestion?: string[];
     tone?: string;
     reason?: string;
   } | null>(null);
 
-  useEffect(() => {
+  const fetchSuggestions = useCallback(async (): Promise<void> => {
     if (!converstationId) return;
 
-    const init = async (): Promise<void> => {
-      try {
-        setLoading(true);
-        const response = await api.get(
-          `/api/chat/converstation/rephase/suggestion?conversationId=${converstationId}`
-        );
-        setApiData(response.data);
-      } catch (err) {
-        console.error("Error: Rephrase Panel", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    init();
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await api.get(
+        `/api/chat/converstation/rephase/suggestion?conversationId=${converstationId}`
+      );
+      setApiData(response.data);
+    } catch (err: unknown) {
+      console.error("Error: Rephrase Panel", err);
+      setError("Unable to fetch rephrase suggestions. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   }, [converstationId]);
+
+  useEffect(() => {
+    fetchSuggestions();
+  }, [fetchSuggestions]);
 
   if (loading) {
     return (
       <div className="rephrase-panel panel-slide-in">
         <p className="text-xs text-muted-foreground">Loading suggestions…</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rephrase-panel panel-slide-in space-y-3">
+        <button className="back-btn" onClick={onBack}>
+          <ChevronLeft size={13} /> Back
+        </button>
+        <p className="text-xs text-negative">{error}</p>
+        <Button size="sm" variant="outline" onClick={fetchSuggestions}>
+          Retry
+        </Button>
       </div>
     );
   }
@@ -181,6 +198,9 @@ function RephrasePanel({
             </button>
           </li>
         ))}
+        {finalSuggestions.length === 0 && (
+          <li className="text-xs text-muted-foreground">No suggestions are available right now.</li>
+        )}
       </ul>
     </div>
   );
@@ -731,35 +751,57 @@ function ComposerGuard({ draft, converstationId, onClear }: ComposerGuardProps):
   const [step, setStep] = useState<'warn' | 'rephrase' | null>(null);
   const [loading, setLoading] = useState(false);
   const [hidden, setHidden] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [userMessage, setUserMessage] = useState<string>("");
 
-  useEffect(() => {
-    const init = async (): Promise<void> => {
-      try {
-        setLoading(true);
-        const response = await api.get(`/api/chat/converstation/rephrase?converstationId=${converstationId}`);
-        const data = response.data;
-        if (data.lastMessageIsBlocked) {
-          setStep('warn');
-          if (hidden) {
-            setHidden(false);
-          }
-          setUserMessage(data.lastMessage);
-        } else {
-          setHidden(true);
-        }
-      } catch (err) {
-        console.error("COMPOSE GUARD ERROR", err);
-      } finally {
-        setLoading(false);
+  const fetchGuardStatus = useCallback(async (): Promise<void> => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await api.get(`/api/chat/converstation/rephrase?conversationId=${converstationId}`);
+      const data = response.data as { lastMessageIsBlocked?: boolean; lastMessage?: string | null };
+
+      if (data.lastMessageIsBlocked) {
+        setStep('warn');
+        setHidden(false);
+        setUserMessage(data.lastMessage ?? '');
+      } else {
+        setStep(null);
+        setHidden(true);
+        setUserMessage('');
       }
-    };
-    init();
-  }, [converstationId, hidden]);
+    } catch (err: unknown) {
+      console.error("COMPOSE GUARD ERROR", err);
+      setError('Unable to check message safety status.');
+      setStep(null);
+      setHidden(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [converstationId]);
+
+  useEffect(() => {
+    fetchGuardStatus();
+  }, [fetchGuardStatus]);
 
   const mockWarning = draft.length > 10 ? "This message may come across as dismissive. Consider softening your tone." : null;
 
   if (hidden) return null;
+
+  if (loading) {
+    return <div className="text-xs text-muted-foreground">Checking for message warnings…</div>;
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-2">
+        <p className="text-xs text-negative">{error}</p>
+        <Button size="sm" variant="outline" onClick={fetchGuardStatus}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
 
   if (step === 'rephrase') {
     return (
