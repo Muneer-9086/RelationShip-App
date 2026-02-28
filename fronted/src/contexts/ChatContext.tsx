@@ -217,6 +217,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setActiveConversationId(null);
     setOnlineUsers([]);
     setTypingFrom({});
+    setContentAlerts([]);
     convMapRef.current.clear();
   }, []);
 
