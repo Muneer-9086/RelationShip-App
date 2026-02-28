@@ -487,6 +487,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     showInsights,
     setShowInsights,
     sendMessageAI,
+    stopAIStream,
     isUserOnline,
     getTypingUsers,
   };
