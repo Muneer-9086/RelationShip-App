@@ -21,8 +21,7 @@ import {
   quickContentCheck, 
   contentDetectionStore,
   type ContentDetectionResult,
-  type UserContentInsight,
-  type PatternAlert
+  type UserContentInsight
 } from "../contentDetection";
 import mongoose from "mongoose";
 import ConversationMemory from "../model/aiMessage.model";
@@ -341,33 +340,14 @@ function handleGetContentInsights(
   socket: AuthenticatedWs, 
   data: ContentInsightRequestPayload
 ): void {
-  const userId = socket.userId!;
   const limit = Math.min(data?.limit ?? 10, 50); // Max 50 insights
-  
-  // Get ONLY this user's insights (strict isolation)
-  let insights = contentDetectionStore.getRecentInsights(userId, limit);
-  
-  // If conversationId provided, filter to that conversation
-  if (data?.conversationId) {
-    insights = insights.filter(i => i.conversationId === data.conversationId);
-  }
-  
-  // Return sanitized insights (remove content for privacy)
-  const sanitizedInsights = insights.map(insight => ({
-    messageId: insight.messageId,
-    timestamp: insight.timestamp,
-    conversationId: insight.conversationId,
-    detection: {
-      isProblematic: insight.detection.isProblematic,
-      flags: insight.detection.flags,
-      severity: insight.detection.severity,
-      suggestions: insight.detection.suggestions
-    }
-  }));
-  
+
+  // User should not receive internal moderation insights over WS.
   send(socket, "content:insights", {
-    insights: sanitizedInsights,
-    total: insights.length,
+    insights: [],
+    total: 0,
+    conversationId: data?.conversationId,
+    limit,
     timestamp: Date.now()
   });
 }
@@ -375,13 +355,9 @@ function handleGetContentInsights(
 // ─── Pattern Alerts Handler (User-Isolated) ───────────────────────────────────
 
 function handleGetPatternAlerts(socket: AuthenticatedWs): void {
-  const userId = socket.userId!;
-  
-  // Get ONLY this user's alerts (strict isolation)
-  const alerts = contentDetectionStore.getPatternAlerts(userId);
-  
+  // User should not receive internal moderation pattern alerts over WS.
   send(socket, "content:pattern_alerts", {
-    alerts,
+    alerts: [],
     timestamp: Date.now()
   });
 }
@@ -485,7 +461,7 @@ async function handleMessageSendWithSentiment(
         return;
       }
 
-      // If problematic but not blocking, send warning to SENDER ONLY
+      // If problematic but not blocking, keep server-side insight only.
       if (detection.isProblematic) {
         const flaggedPayload: ContentFlaggedPayload = {
           messageId,
@@ -574,7 +550,6 @@ async function handleMessageSend(
     const senderPayload = {
       message: msg,
       conversationId: conv.conversationId,
-      status,
       channel: "human"
     };
     send(socket, "message:receive", senderPayload);
